@@ -46,7 +46,7 @@ const Sidebar = ({
           </div>
           <div className="flex-1">
             <p className="text-sm font-medium text-white">
-              {user?.username || "User"}
+              {user?.attributes?.['custom:Name'] || user?.attributes?.name || "User"}
             </p>
             <p className="text-xs text-gray-400">Administrator</p>
           </div>

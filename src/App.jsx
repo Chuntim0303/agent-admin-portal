@@ -47,11 +47,7 @@ function App() {
 
           {/* Main content - Account for sidebar width with ml-64 */}
           <main className="ml-64 min-h-screen flex flex-col">
-            <header className="bg-white shadow-sm border-b p-4">
-              <h2 className="text-2xl font-semibold text-gray-800">
-                {currentPageData?.name}
-              </h2>
-            </header>
+
                      
             <div className="flex-1 p-6">
               {currentPageData?.component}
