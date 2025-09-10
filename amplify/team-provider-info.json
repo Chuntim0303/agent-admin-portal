@@ -1,0 +1,20 @@
+{
+  "dev": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-agentadminportal-dev-4ab10-authRole",
+      "UnauthRoleArn": "arn:aws:iam::130799455054:role/amplify-agentadminportal-dev-4ab10-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::130799455054:role/amplify-agentadminportal-dev-4ab10-authRole",
+      "Region": "ap-southeast-1",
+      "DeploymentBucketName": "amplify-agentadminportal-dev-4ab10-deployment",
+      "UnauthRoleName": "amplify-agentadminportal-dev-4ab10-unauthRole",
+      "StackName": "amplify-agentadminportal-dev-4ab10",
+      "StackId": "arn:aws:cloudformation:ap-southeast-1:130799455054:stack/amplify-agentadminportal-dev-4ab10/48cd3420-8e24-11f0-949a-0235faf477a1",
+      "AmplifyAppId": "dt67r90n46z16"
+    },
+    "categories": {
+      "auth": {
+        "agentadminportal5596f731": {}
+      }
+    }
+  }
+}
