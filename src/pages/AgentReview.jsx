@@ -1,73 +1,16 @@
 import React, { useEffect, useState, useMemo } from "react";
 
-// Enhanced Agent interface with all database columns
-export interface Agent {
-  id: number;
-  first_name: string;
-  last_name: string;
-  email: string;
-  phone: string;
-  address: string;
-  date_of_birth: string;
-  national_id: string;
-  application_status: "pending" | "approved" | "rejected";
-  submitted_at: string;
-  reviewed_at: string | null;
-  reviewed_by: string | null;
-  rejection_reason: string | null;
-  application_notes: string | null;
-  documents: string | null;
-  bank_account_info: string | null;
-  cognito_user_id: string | null;
-  cognito_username: string | null;
-  user_type: string;
-  hierarchy_level: number;
-  account_status: "active" | "inactive" | "suspended";
-  last_login: string | null;
-  agent_code: string | null;
-  tier: "bronze" | "silver" | "gold" | "platinum";
-  commission_rate: number;
-  territory: string | null;
-  specializations: string | null;
-  certification_level: "basic" | "intermediate" | "advanced" | "expert";
-  certification_expiry: string | null;
-  performance_metrics: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-// Filter interface
-interface Filters {
-  search: string;
-  application_status: string;
-  account_status: string;
-  tier: string;
-  territory: string;
-  certification_level: string;
-  date_range: string;
-  user_type: string;
-}
-
-// View preset interface
-interface ViewPreset {
-  name: string;
-  description: string;
-  filters: Partial<Filters>;
-  icon: string;
-  color: string;
-}
-
 // Your Lambda API endpoint
 const API_BASE = "https://vnq7qic97e.execute-api.ap-southeast-1.amazonaws.com/dev";
 
-const AgentReview: React.FC = () => {
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [currentView, setCurrentView] = useState<string>("all");
-  const [showFilters, setShowFilters] = useState<boolean>(false);
+const AgentReview = () => {
+  const [agents, setAgents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [currentView, setCurrentView] = useState("all");
+  const [showFilters, setShowFilters] = useState(false);
   
   // Filter states
-  const [filters, setFilters] = useState<Filters>({
+  const [filters, setFilters] = useState({
     search: "",
     application_status: "",
     account_status: "",
@@ -79,7 +22,7 @@ const AgentReview: React.FC = () => {
   });
 
   // Predefined view presets
-  const viewPresets: ViewPreset[] = [
+  const viewPresets = [
     {
       name: "all",
       description: "All Agents",
@@ -142,13 +85,13 @@ const AgentReview: React.FC = () => {
     fetchAgents();
   }, []);
 
-  const fetchAgents = async (): Promise<void> => {
+  const fetchAgents = async () => {
     try {
       const response = await fetch(`${API_BASE}/admin/agents`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      const data: Agent[] = await response.json();
+      const data = await response.json();
       setAgents(data);
       setLoading(false);
     } catch (error) {
@@ -158,7 +101,7 @@ const AgentReview: React.FC = () => {
   };
 
   // Apply view preset
-  const applyView = (viewName: string): void => {
+  const applyView = (viewName) => {
     setCurrentView(viewName);
     const view = viewPresets.find(v => v.name === viewName);
     if (view) {
@@ -167,7 +110,7 @@ const AgentReview: React.FC = () => {
   };
 
   // Reset all filters
-  const resetFilters = (): void => {
+  const resetFilters = () => {
     setFilters({
       search: "",
       application_status: "",
@@ -269,15 +212,15 @@ const AgentReview: React.FC = () => {
   }, [agents, filters]);
 
   // Get unique values for filter dropdowns
-  const getUniqueValues = (field: keyof Agent): string[] => {
+  const getUniqueValues = (field) => {
     const values = agents
       .map(agent => agent[field])
-      .filter(Boolean) as string[];
+      .filter(Boolean);
     return [...new Set(values)].sort();
   };
 
   // Calculate counts for each view
-  const getViewCount = (viewName: string): number => {
+  const getViewCount = (viewName) => {
     if (viewName === "all") return agents.length;
     
     return agents.filter(agent => {
@@ -303,7 +246,7 @@ const AgentReview: React.FC = () => {
     }).length;
   };
 
-  const handleAction = async (agentId: number, action: "approve" | "reject"): Promise<void> => {
+  const handleAction = async (agentId, action) => {
     try {
       // Update UI immediately for better UX
       setAgents(prev =>
@@ -356,7 +299,7 @@ const AgentReview: React.FC = () => {
   };
 
   // Bulk approve action
-  const handleBulkApprove = (): void => {
+  const handleBulkApprove = () => {
     const pendingAgents = filteredAgents.filter(a => a.application_status === 'pending');
     if (pendingAgents.length === 0) {
       alert('No pending applications to process.');
@@ -369,7 +312,7 @@ const AgentReview: React.FC = () => {
   };
 
   // Export to CSV
-  const exportToCSV = (): void => {
+  const exportToCSV = () => {
     const csvData = filteredAgents.map(agent => ({
       ID: agent.id,
       'First Name': agent.first_name,
@@ -401,7 +344,7 @@ const AgentReview: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  const getStatusBadge = (status: Agent["application_status"]): string => {
+  const getStatusBadge = (status) => {
     const baseClasses = "px-2 py-1 rounded-full text-xs font-semibold";
     switch (status) {
       case "approved":
@@ -413,7 +356,7 @@ const AgentReview: React.FC = () => {
     }
   };
 
-  const getAccountStatusBadge = (status: Agent["account_status"]): string => {
+  const getAccountStatusBadge = (status) => {
     const baseClasses = "px-2 py-1 rounded-full text-xs font-semibold";
     switch (status) {
       case "active":
@@ -425,7 +368,7 @@ const AgentReview: React.FC = () => {
     }
   };
 
-  const getTierBadge = (tier: Agent["tier"]): string => {
+  const getTierBadge = (tier) => {
     const baseClasses = "px-2 py-1 rounded-full text-xs font-semibold";
     switch (tier) {
       case "platinum":
@@ -439,17 +382,17 @@ const AgentReview: React.FC = () => {
     }
   };
 
-  const formatDate = (dateString: string | null): string => {
+  const formatDate = (dateString) => {
     if (!dateString) return "N/A";
     return new Date(dateString).toLocaleDateString();
   };
 
-  const formatDateTime = (dateString: string | null): string => {
+  const formatDateTime = (dateString) => {
     if (!dateString) return "N/A";
     return new Date(dateString).toLocaleString();
   };
 
-  const truncateText = (text: string | null, maxLength: number = 30): string => {
+  const truncateText = (text, maxLength = 30) => {
     if (!text) return "N/A";
     return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
   };
