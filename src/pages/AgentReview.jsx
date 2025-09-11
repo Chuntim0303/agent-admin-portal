@@ -35,6 +35,13 @@ const AgentReview = () => {
   const [agreementAgent, setAgreementAgent] = useState(null);
   const [agreementSending, setAgreementSending] = useState(false);
   
+  // NEW: Approval with PDF modal state
+  const [showApprovalModal, setShowApprovalModal] = useState(false);
+  const [approvalAgent, setApprovalAgent] = useState(null);
+  const [approvalPdfFile, setApprovalPdfFile] = useState(null);
+  const [approvalLoading, setApprovalLoading] = useState(false);
+  const [approvalNotes, setApprovalNotes] = useState('');
+  
   // Filter states
   const [filters, setFilters] = useState({
     search: "",
@@ -146,7 +153,7 @@ const AgentReview = () => {
     }
   ];
 
-  // Column configuration
+  // Column configuration - Updated to include new columns
   const columns = [
     { key: 'id', label: 'ID', sortable: true },
     { key: 'full_name', label: 'Full Name', sortable: true },
@@ -167,6 +174,8 @@ const AgentReview = () => {
     { key: 'upline_email', label: 'Upline Email', sortable: true },
     { key: 'referred_by', label: 'Referred By', sortable: true },
     { key: 'account_status', label: 'Account Status', sortable: true },
+    { key: 'agreement_sent', label: 'Agreement Status', sortable: true }, // NEW
+    { key: 'agreement_url', label: 'Agreement URL', sortable: false }, // NEW
     { key: 'icfront_s3', label: 'IC Front', sortable: false },
     { key: 'icback_s3', label: 'IC Back', sortable: false }
   ];
@@ -374,6 +383,123 @@ const AgentReview = () => {
           return false;
       }
     }).length;
+  };
+
+  // NEW: PDF file conversion helper
+  const convertFileToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = error => reject(error);
+    });
+  };
+
+  // NEW: Approval modal functions
+  const openApprovalModal = (agent) => {
+    setApprovalAgent(agent);
+    setApprovalPdfFile(null);
+    setApprovalNotes('Application approved');
+    setShowApprovalModal(true);
+  };
+
+  const closeApprovalModal = () => {
+    setShowApprovalModal(false);
+    setApprovalAgent(null);
+    setApprovalPdfFile(null);
+    setApprovalNotes('');
+    setApprovalLoading(false);
+  };
+
+  const handlePdfFileChange = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      if (file.type !== 'application/pdf') {
+        alert('Please select a PDF file only.');
+        event.target.value = '';
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) { // 10MB limit
+        alert('File size must be less than 10MB.');
+        event.target.value = '';
+        return;
+      }
+      setApprovalPdfFile(file);
+    }
+  };
+
+  // NEW: Handle approval with PDF upload
+  const handleApprovalWithPdf = async () => {
+    if (!approvalPdfFile) {
+      alert('Please select a PDF file to upload.');
+      return;
+    }
+
+    setApprovalLoading(true);
+
+    try {
+      // Convert PDF to base64
+      const base64Pdf = await convertFileToBase64(approvalPdfFile);
+      
+      const requestPayload = {
+        id: approvalAgent.id,
+        reviewed_by: "admin",
+        application_notes: approvalNotes,
+        agreement_pdf: base64Pdf,
+        agreement_filename: approvalPdfFile.name
+      };
+
+      // Update UI immediately for better UX
+      setAgents(prev =>
+        prev.map(a =>
+          a.id === approvalAgent.id
+            ? { 
+                ...a, 
+                application_status: "approved",
+                account_status: "active",
+                agreement_sent: 1,
+                reviewed_at: new Date().toISOString(),
+                reviewed_by: "admin"
+              }
+            : a
+        )
+      );
+
+      // Call backend API
+      const response = await fetch(`${API_BASE}/admin/agents/approve`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestPayload)
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to approve agent");
+      }
+
+      const result = await response.json();
+      console.log("Agent approved successfully with PDF:", result);
+
+      closeApprovalModal();
+      alert("Agent approved successfully and agreement PDF uploaded!");
+
+    } catch (error) {
+      console.error("Error approving agent with PDF:", error);
+      
+      // Revert UI changes on error
+      setAgents(prev =>
+        prev.map(a =>
+          a.id === approvalAgent.id
+            ? { ...a, application_status: "pending" }
+            : a
+        )
+      );
+      
+      alert("Failed to approve agent. Please try again.");
+    } finally {
+      setApprovalLoading(false);
+    }
   };
 
   // Edit modal functions
@@ -606,6 +732,15 @@ const AgentReview = () => {
 
       const result = await response.json();
       
+      // Update agreement_sent status in UI
+      setAgents(prev =>
+        prev.map(a =>
+          a.id === agreementAgent.id
+            ? { ...a, agreement_sent: 1, updated_at: new Date().toISOString() }
+            : a
+        )
+      );
+      
       closeAgreementModal();
       alert(`Agreement sent successfully! (${result.file_type || 'PDF document'})`);
 
@@ -642,7 +777,7 @@ const AgentReview = () => {
     closeRejectionModal();
   };
 
-  // Handle approve/reject actions
+  // Handle approve/reject actions (simple approval without PDF)
   const handleAction = async (agentId, action, rejectionReasonText = null, notes = '') => {
     try {
       // Update UI immediately for better UX
@@ -695,6 +830,39 @@ const AgentReview = () => {
     }
   };
 
+  // NEW: Agreement download handler
+  const handleAgreementDownload = async (agent) => {
+    if (!agent.agreement_url) {
+      alert('No agreement available for download.');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}/admin/agents/agreement-download`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: agent.id
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get download URL');
+      }
+
+      const result = await response.json();
+      
+      // Open download URL in new tab
+      window.open(result.download_url, '_blank');
+
+    } catch (error) {
+      console.error('Error downloading agreement:', error);
+      alert('Failed to download agreement. Please try again.');
+    }
+  };
+
   // Export to CSV
   const exportToCSV = () => {
     if (filteredAgents.length === 0) {
@@ -723,6 +891,8 @@ const AgentReview = () => {
       'Referred By': agent.referred_by || '',
       'Application Status': agent.application_status || '',
       'Account Status': agent.account_status || '',
+      'Agreement Sent': agent.agreement_sent || 0,
+      'Agreement URL': agent.agreement_url || '',
       'IC Front S3': agent.icfront_s3 || '',
       'IC Back S3': agent.icback_s3 || ''
     }));
@@ -776,6 +946,38 @@ const AgentReview = () => {
     }
     
     return truncateText(s3Url);
+  };
+
+  // NEW: Render agreement status badge
+  const getAgreementStatusBadge = (agreementSent, agreementUrl) => {
+    if (agreementSent === 1) {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+          ✓ Sent
+        </span>
+      );
+    } else if (agreementUrl) {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+          📄 Uploaded
+        </span>
+      );
+    } else {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+          ⏳ Pending
+        </span>
+      );
+    }
+  };
+
+  // NEW: Get agreement button style based on status
+  const getAgreementButtonStyle = (agreementSent) => {
+    if (agreementSent === 1) {
+      return "inline-flex items-center px-3 py-1.5 border border-green-300 text-xs font-medium rounded-md text-green-700 bg-green-50 hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors";
+    } else {
+      return "inline-flex items-center px-3 py-1.5 border border-yellow-300 text-xs font-medium rounded-md text-yellow-700 bg-yellow-50 hover:bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition-colors";
+    }
   };
 
   const getStatusBadge = (status) => {
@@ -1068,6 +1270,106 @@ const AgentReview = () => {
         </div>
       </div>
 
+      {/* NEW: Approval with PDF Modal */}
+      {showApprovalModal && approvalAgent && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
+          <div className="bg-white rounded-lg shadow-2xl w-full max-w-md">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-semibold text-gray-900">Approve Agent with Agreement</h3>
+                <button
+                  onClick={closeApprovalModal}
+                  className="text-gray-400 hover:text-gray-600 text-2xl font-bold"
+                  disabled={approvalLoading}
+                >
+                  ×
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">
+                    Agent: <span className="font-semibold">{approvalAgent.full_name}</span>
+                  </p>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Email: <span className="font-semibold">{approvalAgent.email}</span>
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Upload Agreement PDF: <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="file"
+                    accept=".pdf"
+                    onChange={handlePdfFileChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={approvalLoading}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Maximum file size: 10MB</p>
+                  {approvalPdfFile && (
+                    <p className="text-sm text-green-600 mt-1">
+                      Selected: {approvalPdfFile.name} ({(approvalPdfFile.size / 1024 / 1024).toFixed(2)} MB)
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Application Notes:
+                  </label>
+                  <textarea
+                    value={approvalNotes}
+                    onChange={(e) => setApprovalNotes(e.target.value)}
+                    placeholder="Application notes..."
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                    disabled={approvalLoading}
+                  />
+                </div>
+
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <h4 className="text-sm font-medium text-blue-900 mb-2">What will happen:</h4>
+                  <ul className="text-sm text-blue-700 space-y-1">
+                    <li>• Agent status will be set to "Approved"</li>
+                    <li>• Cognito user account will be created</li>
+                    <li>• PDF agreement will be uploaded to S3</li>
+                    <li>• Agreement URL will be saved to database</li>
+                    <li>• Agreement status will be marked as "Sent"</li>
+                    <li>• Email with credentials will be sent to agent</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div className="mt-6 flex justify-end space-x-3">
+                <button
+                  onClick={closeApprovalModal}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
+                  disabled={approvalLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleApprovalWithPdf}
+                  className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center"
+                  disabled={approvalLoading || !approvalPdfFile}
+                >
+                  {approvalLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Approving...
+                    </>
+                  ) : (
+                    'Approve with PDF'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Status Change Modal */}
       {showStatusModal && statusChangeAgent && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
@@ -1169,6 +1471,9 @@ const AgentReview = () => {
                   <p className="text-sm text-gray-600 mb-4">
                     Current Status: <span className={getStatusBadge(agreementAgent.application_status)}>{agreementAgent.application_status}</span>
                   </p>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Agreement Status: {getAgreementStatusBadge(agreementAgent.agreement_sent, agreementAgent.agreement_url)}
+                  </p>
                 </div>
 
                 <div className="bg-blue-50 p-4 rounded-lg">
@@ -1179,6 +1484,7 @@ const AgentReview = () => {
                     <li>• Document will be stored in S3</li>
                     <li>• Email with agreement link will be sent to the agent</li>
                     <li>• Agent will be able to download and review the agreement</li>
+                    <li>• Agreement status will be marked as "Sent"</li>
                     {agreementAgent?.application_status === "pending" && (
                       <li className="font-medium">• Agreement sent for review before final approval decision</li>
                     )}
@@ -1305,9 +1611,24 @@ const AgentReview = () => {
                     </span>
                   </div>
                   <div>
+                    <span className="font-medium">Agreement Status:</span>
+                    <span className="ml-2">{getAgreementStatusBadge(editingAgent.agreement_sent, editingAgent.agreement_url)}</span>
+                  </div>
+                  <div>
                     <span className="font-medium">Created:</span>
                     <span className="ml-2">{new Date(editingAgent.created_at).toLocaleDateString()}</span>
                   </div>
+                  {editingAgent.agreement_url && (
+                    <div>
+                      <span className="font-medium">Agreement:</span>
+                      <button
+                        onClick={() => handleAgreementDownload(editingAgent)}
+                        className="ml-2 text-blue-600 hover:text-blue-800 underline text-sm"
+                      >
+                        Download PDF
+                      </button>
+                    </div>
+                  )}
                   {editingAgent.icfront_s3 && (
                     <div>
                       <span className="font-medium">IC Front:</span>
@@ -1479,6 +1800,19 @@ const AgentReview = () => {
                         <td key={column.key} className="px-4 py-3 text-sm text-gray-900">
                           {column.key === 'icfront_s3' || column.key === 'icback_s3' ? (
                             renderS3Link(agent[column.key])
+                          ) : column.key === 'agreement_url' ? (
+                            agent[column.key] ? (
+                              <button
+                                onClick={() => handleAgreementDownload(agent)}
+                                className="text-blue-600 hover:text-blue-800 underline text-sm"
+                              >
+                                Download PDF
+                              </button>
+                            ) : (
+                              "N/A"
+                            )
+                          ) : column.key === 'agreement_sent' ? (
+                            getAgreementStatusBadge(agent.agreement_sent, agent.agreement_url)
                           ) : column.key === 'address' || column.key === 'addr_line2' ? (
                             <span title={agent[column.key] || ""}>
                               {truncateText(agent[column.key])}
@@ -1520,11 +1854,11 @@ const AgentReview = () => {
                             Status
                           </button>
 
-                          {/* Agreement Button - Available for pending and approved agents */}
+                          {/* Agreement Button - Available for pending and approved agents, color-coded */}
                           {(agent.application_status === "pending" || agent.application_status === "approved") && (
                             <button
                               onClick={() => openAgreementModal(agent)}
-                              className="inline-flex items-center px-3 py-1.5 border border-green-300 text-xs font-medium rounded-md text-green-700 bg-green-50 hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
+                              className={getAgreementButtonStyle(agent.agreement_sent)}
                               title="Send Agreement"
                             >
                               <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1538,9 +1872,9 @@ const AgentReview = () => {
                           {agent.application_status === "pending" && (
                             <>
                               <button
-                                onClick={() => handleAction(agent.id, "approve")}
+                                onClick={() => openApprovalModal(agent)}
                                 className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
-                                title="Approve Agent"
+                                title="Approve Agent with PDF"
                               >
                                 <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
