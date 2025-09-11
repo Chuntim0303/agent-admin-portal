@@ -24,10 +24,22 @@ const AgentReview = () => {
   const [editFormData, setEditFormData] = useState({});
   const [editLoading, setEditLoading] = useState(false);
   
+  // Status change modal state
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [statusChangeAgent, setStatusChangeAgent] = useState(null);
+  const [newStatus, setNewStatus] = useState('');
+  const [statusChangeReason, setStatusChangeReason] = useState('');
+  
+  // Agreement modal state
+  const [showAgreementModal, setShowAgreementModal] = useState(false);
+  const [agreementAgent, setAgreementAgent] = useState(null);
+  const [agreementSending, setAgreementSending] = useState(false);
+  
   // Filter states
   const [filters, setFilters] = useState({
     search: "",
     application_status: "",
+    account_status: "",
     gender: "",
     user_type: "",
     date_range: ""
@@ -98,6 +110,20 @@ const AgentReview = () => {
       color: "bg-red-500"
     },
     {
+      name: "active",
+      description: "Active Users",
+      filters: { account_status: "active" },
+      icon: "🟢",
+      color: "bg-green-500"
+    },
+    {
+      name: "suspended",
+      description: "Suspended Users",
+      filters: { account_status: "suspended" },
+      icon: "🔴",
+      color: "bg-red-500"
+    },
+    {
       name: "male",
       description: "Male Agents",
       filters: { gender: "male" },
@@ -140,6 +166,7 @@ const AgentReview = () => {
     { key: 'user_type', label: 'User Type', sortable: true },
     { key: 'upline_email', label: 'Upline Email', sortable: true },
     { key: 'referred_by', label: 'Referred By', sortable: true },
+    { key: 'account_status', label: 'Account Status', sortable: true },
     { key: 'icfront_s3', label: 'IC Front', sortable: false },
     { key: 'icback_s3', label: 'IC Back', sortable: false }
   ];
@@ -175,6 +202,7 @@ const AgentReview = () => {
     const resetFilters = {
       search: "",
       application_status: "",
+      account_status: "",
       gender: "",
       user_type: "",
       date_range: ""
@@ -194,6 +222,7 @@ const AgentReview = () => {
     setFilters({
       search: "",
       application_status: "",
+      account_status: "",
       gender: "",
       user_type: "",
       date_range: ""
@@ -234,6 +263,11 @@ const AgentReview = () => {
 
       // Application status filter
       if (filters.application_status && filters.application_status !== agent.application_status) {
+        return false;
+      }
+
+      // Account status filter
+      if (filters.account_status && filters.account_status !== agent.account_status) {
         return false;
       }
 
@@ -325,6 +359,10 @@ const AgentReview = () => {
           return agent.application_status === "approved";
         case "rejected":
           return agent.application_status === "rejected";
+        case "active":
+          return agent.account_status === "active";
+        case "suspended":
+          return agent.account_status === "suspended";
         case "male":
           return agent.gender === "male";
         case "female":
@@ -398,19 +436,11 @@ const AgentReview = () => {
 
     setEditLoading(true);
     
-    // Log the form data being submitted
-    console.log("=== EDIT AGENT DEBUG ===");
-    console.log("Editing Agent ID:", editingAgent.id);
-    console.log("Original Agent Data:", editingAgent);
-    console.log("Form Data to Submit:", editFormData);
-    
     const requestPayload = {
       id: editingAgent.id,
       ...editFormData,
       updated_by: "admin"
     };
-    console.log("Full Request Payload:", requestPayload);
-    console.log("API Endpoint:", `${API_BASE}/admin/agents/update`);
 
     try {
       // Update UI immediately for better UX
@@ -422,8 +452,6 @@ const AgentReview = () => {
         )
       );
 
-      console.log("Making PUT request to update agent...");
-
       // Call backend API
       const response = await fetch(`${API_BASE}/admin/agents/update`, {
         method: "PUT",
@@ -433,17 +461,11 @@ const AgentReview = () => {
         body: JSON.stringify(requestPayload)
       });
 
-      console.log("Response Status:", response.status);
-      console.log("Response Headers:", Object.fromEntries(response.headers.entries()));
-
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("Response Error Text:", errorText);
-        
         let errorMessage = "Failed to update agent";
         try {
           const errorJson = JSON.parse(errorText);
-          console.error("Parsed Error JSON:", errorJson);
           errorMessage = errorJson.message || errorJson.error || errorMessage;
           if (errorJson.errors && Array.isArray(errorJson.errors)) {
             errorMessage += "\nValidation errors: " + errorJson.errors.join(", ");
@@ -456,8 +478,6 @@ const AgentReview = () => {
       }
 
       const result = await response.json();
-      console.log("Agent updated successfully - Response:", result);
-      console.log("Updated Agent Data:", result.agent);
       
       // Update the agents state with the response data
       setAgents(prev =>
@@ -472,11 +492,7 @@ const AgentReview = () => {
       alert("Agent updated successfully!");
 
     } catch (error) {
-      console.error("=== ERROR UPDATING AGENT ===");
-      console.error("Error Type:", error.constructor.name);
-      console.error("Error Message:", error.message);
-      console.error("Error Stack:", error.stack);
-      console.error("Full Error Object:", error);
+      console.error("Error updating agent:", error);
       
       // Revert UI changes on error
       setAgents(prev =>
@@ -490,7 +506,114 @@ const AgentReview = () => {
       alert(`Failed to update agent: ${error.message}`);
     } finally {
       setEditLoading(false);
-      console.log("=== END EDIT AGENT DEBUG ===");
+    }
+  };
+
+  // Status change modal functions
+  const openStatusModal = (agent) => {
+    setStatusChangeAgent(agent);
+    setNewStatus(agent.application_status);
+    setStatusChangeReason('');
+    setShowStatusModal(true);
+  };
+
+  const closeStatusModal = () => {
+    setShowStatusModal(false);
+    setStatusChangeAgent(null);
+    setNewStatus('');
+    setStatusChangeReason('');
+  };
+
+  const handleStatusChange = async () => {
+    if (!newStatus || newStatus === statusChangeAgent.application_status) {
+      alert('Please select a different status.');
+      return;
+    }
+
+    if (!statusChangeReason.trim()) {
+      alert('Please provide a reason for the status change.');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}/admin/agents/status`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: statusChangeAgent.id,
+          status: newStatus,
+          reason: statusChangeReason,
+          updated_by: "admin"
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update status');
+      }
+
+      const result = await response.json();
+      
+      // Update UI
+      setAgents(prev =>
+        prev.map(a =>
+          a.id === statusChangeAgent.id
+            ? { ...a, application_status: newStatus, updated_at: new Date().toISOString() }
+            : a
+        )
+      );
+
+      closeStatusModal();
+      alert('Status updated successfully!');
+
+    } catch (error) {
+      console.error('Error updating status:', error);
+      alert('Failed to update status. Please try again.');
+    }
+  };
+
+  // Agreement modal functions
+  const openAgreementModal = (agent) => {
+    setAgreementAgent(agent);
+    setShowAgreementModal(true);
+  };
+
+  const closeAgreementModal = () => {
+    setShowAgreementModal(false);
+    setAgreementAgent(null);
+    setAgreementSending(false);
+  };
+
+  const handleSendAgreement = async () => {
+    setAgreementSending(true);
+
+    try {
+      const response = await fetch(`${API_BASE}/admin/agents/send-agreement`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: agreementAgent.id,
+          sent_by: "admin"
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to send agreement');
+      }
+
+      const result = await response.json();
+      
+      closeAgreementModal();
+      alert(`Agreement sent successfully! (${result.file_type || 'PDF document'})`);
+
+    } catch (error) {
+      console.error('Error sending agreement:', error);
+      alert('Failed to send agreement. Please try again.');
+    } finally {
+      setAgreementSending(false);
     }
   };
 
@@ -598,6 +721,8 @@ const AgentReview = () => {
       'User Type': agent.user_type || '',
       'Upline Email': agent.upline_email || '',
       'Referred By': agent.referred_by || '',
+      'Application Status': agent.application_status || '',
+      'Account Status': agent.account_status || '',
       'IC Front S3': agent.icfront_s3 || '',
       'IC Back S3': agent.icback_s3 || ''
     }));
@@ -651,6 +776,34 @@ const AgentReview = () => {
     }
     
     return truncateText(s3Url);
+  };
+
+  const getStatusBadge = (status) => {
+    const baseClasses = "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium";
+    switch (status) {
+      case 'approved':
+        return `${baseClasses} bg-green-100 text-green-800`;
+      case 'rejected':
+        return `${baseClasses} bg-red-100 text-red-800`;
+      case 'pending':
+        return `${baseClasses} bg-yellow-100 text-yellow-800`;
+      default:
+        return `${baseClasses} bg-gray-100 text-gray-800`;
+    }
+  };
+
+  const getAccountStatusBadge = (status) => {
+    const baseClasses = "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium";
+    switch (status) {
+      case 'active':
+        return `${baseClasses} bg-green-100 text-green-800`;
+      case 'suspended':
+        return `${baseClasses} bg-red-100 text-red-800`;
+      case 'inactive':
+        return `${baseClasses} bg-gray-100 text-gray-800`;
+      default:
+        return `${baseClasses} bg-gray-100 text-gray-800`;
+    }
   };
 
   // Loading state
@@ -778,6 +931,23 @@ const AgentReview = () => {
                         </select>
                       </div>
 
+                      {/* Account Status */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-700">
+                          Account Status
+                        </label>
+                        <select
+                          value={filters.account_status}
+                          onChange={(e) => setFilters(prev => ({ ...prev, account_status: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        >
+                          <option value="">All Account Status</option>
+                          <option value="active">Active</option>
+                          <option value="suspended">Suspended</option>
+                          <option value="inactive">Inactive</option>
+                        </select>
+                      </div>
+
                       {/* Gender */}
                       <div className="space-y-2">
                         <label className="block text-sm font-medium text-gray-700">
@@ -898,6 +1068,155 @@ const AgentReview = () => {
         </div>
       </div>
 
+      {/* Status Change Modal */}
+      {showStatusModal && statusChangeAgent && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
+          <div className="bg-white rounded-lg shadow-2xl w-full max-w-md">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-semibold text-gray-900">Change Application Status</h3>
+                <button
+                  onClick={closeStatusModal}
+                  className="text-gray-400 hover:text-gray-600 text-2xl font-bold"
+                >
+                  ×
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Agent: <span className="font-semibold">{statusChangeAgent.full_name}</span>
+                  </p>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Current Status: <span className={getStatusBadge(statusChangeAgent.application_status)}>{statusChangeAgent.application_status}</span>
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    New Status: <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={newStatus}
+                    onChange={(e) => setNewStatus(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Reason for Status Change: <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={statusChangeReason}
+                    onChange={(e) => setStatusChangeReason(e.target.value)}
+                    placeholder="Please provide a reason for this status change..."
+                    rows={4}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  />
+                </div>
+              </div>
+              
+              <div className="mt-6 flex justify-end space-x-3">
+                <button
+                  onClick={closeStatusModal}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleStatusChange}
+                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                  disabled={!newStatus || !statusChangeReason.trim() || newStatus === statusChangeAgent.application_status}
+                >
+                  Update Status
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Agreement Modal */}
+      {showAgreementModal && agreementAgent && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
+          <div className="bg-white rounded-lg shadow-2xl w-full max-w-md">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-semibold text-gray-900">Send Agreement</h3>
+                <button
+                  onClick={closeAgreementModal}
+                  className="text-gray-400 hover:text-gray-600 text-2xl font-bold"
+                  disabled={agreementSending}
+                >
+                  ×
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">
+                    Agent: <span className="font-semibold">{agreementAgent.full_name}</span>
+                  </p>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Email: <span className="font-semibold">{agreementAgent.email}</span>
+                  </p>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Current Status: <span className={getStatusBadge(agreementAgent.application_status)}>{agreementAgent.application_status}</span>
+                  </p>
+                </div>
+
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <h4 className="text-sm font-medium text-blue-900 mb-2">What will happen:</h4>
+                  <ul className="text-sm text-blue-700 space-y-1">
+                    <li>• PDF agreement will be generated using the official template</li>
+                    <li>• Agent's information will be populated in the agreement</li>
+                    <li>• Document will be stored in S3</li>
+                    <li>• Email with agreement link will be sent to the agent</li>
+                    <li>• Agent will be able to download and review the agreement</li>
+                    {agreementAgent?.application_status === "pending" && (
+                      <li className="font-medium">• Agreement sent for review before final approval decision</li>
+                    )}
+                    {agreementAgent?.application_status === "approved" && (
+                      <li className="font-medium">• Agent can sign and return the agreement</li>
+                    )}
+                  </ul>
+                </div>
+              </div>
+              
+              <div className="mt-6 flex justify-end space-x-3">
+                <button
+                  onClick={closeAgreementModal}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
+                  disabled={agreementSending}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSendAgreement}
+                  className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center"
+                  disabled={agreementSending}
+                >
+                  {agreementSending ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Sending...
+                    </>
+                  ) : (
+                    'Send Agreement'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Edit Modal */}
       {showEditModal && editingAgent && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
@@ -973,6 +1292,16 @@ const AgentReview = () => {
                       'bg-yellow-100 text-yellow-800'
                     }`}>
                       {editingAgent.application_status}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-medium">Account Status:</span>
+                    <span className={`ml-2 px-2 py-1 rounded-full text-xs ${
+                      editingAgent.account_status === 'active' ? 'bg-green-100 text-green-800' :
+                      editingAgent.account_status === 'suspended' ? 'bg-red-100 text-red-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {editingAgent.account_status || 'Unknown'}
                     </span>
                   </div>
                   <div>
@@ -1135,7 +1464,7 @@ const AgentReview = () => {
                         </div>
                       </th>
                     ))}
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-64 sticky right-0 bg-gray-50">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-96 sticky right-0 bg-gray-50">
                       Actions
                     </th>
                   </tr>
@@ -1154,6 +1483,10 @@ const AgentReview = () => {
                             <span title={agent[column.key] || ""}>
                               {truncateText(agent[column.key])}
                             </span>
+                          ) : column.key === 'account_status' ? (
+                            <span className={getAccountStatusBadge(agent[column.key])}>
+                              {agent[column.key] || 'Unknown'}
+                            </span>
                           ) : (
                             <span className={column.key === 'id' ? 'font-medium' : ''}>
                               {agent[column.key] || "N/A"}
@@ -1162,39 +1495,74 @@ const AgentReview = () => {
                         </td>
                       ))}
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-medium sticky right-0 bg-inherit">
-                        <div className="flex space-x-1">
+                        <div className="flex flex-wrap gap-2">
                           {/* Edit Button - Available for all agents */}
                           <button
                             onClick={() => openEditModal(agent)}
-                            className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 transition-colors text-xs font-semibold"
+                            className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
                             title="Edit Agent Profile"
                           >
-                            ✏ Edit
+                            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            Edit
                           </button>
+                          
+                          {/* Status Change Button - Available for all agents */}
+                          <button
+                            onClick={() => openStatusModal(agent)}
+                            className="inline-flex items-center px-3 py-1.5 border border-indigo-300 text-xs font-medium rounded-md text-indigo-700 bg-indigo-50 hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
+                            title="Change Status"
+                          >
+                            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Status
+                          </button>
+
+                          {/* Agreement Button - Available for pending and approved agents */}
+                          {(agent.application_status === "pending" || agent.application_status === "approved") && (
+                            <button
+                              onClick={() => openAgreementModal(agent)}
+                              className="inline-flex items-center px-3 py-1.5 border border-green-300 text-xs font-medium rounded-md text-green-700 bg-green-50 hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
+                              title="Send Agreement"
+                            >
+                              <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                              Agreement
+                            </button>
+                          )}
                           
                           {/* Approve/Reject buttons - Only for pending agents */}
                           {agent.application_status === "pending" && (
                             <>
                               <button
                                 onClick={() => handleAction(agent.id, "approve")}
-                                className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 transition-colors text-xs font-semibold"
+                                className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
                                 title="Approve Agent"
                               >
-                                ✓ Approve
+                                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                                Approve
                               </button>
                               <button
                                 onClick={() => openRejectionModal(agent.id)}
-                                className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 transition-colors text-xs font-semibold"
+                                className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
                                 title="Reject Agent"
                               >
-                                ✗ Reject
+                                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                                Reject
                               </button>
                             </>
                           )}
                           
                           {/* Status display for non-pending agents */}
                           {agent.application_status !== "pending" && (
-                            <span className="text-gray-400 text-xs">
+                            <span className={getStatusBadge(agent.application_status)}>
                               {agent.application_status === "approved" ? "✓ Approved" : "✗ Rejected"}
                             </span>
                           )}
