@@ -6,6 +6,7 @@ const API_BASE = "https://ruthz37va6.execute-api.ap-southeast-1.amazonaws.com/de
 const AgentReview = () => {
   // State management
   const [agents, setAgents] = useState([]);
+  const [salesSupport, setSalesSupport] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentView, setCurrentView] = useState("all");
   const [showQuickViews, setShowQuickViews] = useState(false);
@@ -35,20 +36,21 @@ const AgentReview = () => {
   const [agreementAgent, setAgreementAgent] = useState(null);
   const [agreementSending, setAgreementSending] = useState(false);
   
-  // NEW: Approval with PDF modal state
+  // Approval with PDF modal state
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [approvalAgent, setApprovalAgent] = useState(null);
   const [approvalPdfFile, setApprovalPdfFile] = useState(null);
   const [approvalLoading, setApprovalLoading] = useState(false);
   const [approvalNotes, setApprovalNotes] = useState('');
   
-  // Filter states
+  // Filter states - UPDATED: search is now separate
+  const [searchTerm, setSearchTerm] = useState(""); // NEW: Separate search
   const [filters, setFilters] = useState({
-    search: "",
     application_status: "",
     account_status: "",
     gender: "",
     user_type: "",
+    sales_support_id: "",
     date_range: ""
   });
 
@@ -83,79 +85,82 @@ const AgentReview = () => {
     { key: 'agent_code', label: 'Agent Code', type: 'text', required: false },
     { key: 'user_type', label: 'User Type', type: 'text', required: false },
     { key: 'upline_email', label: 'Upline Email', type: 'email', required: false },
-    { key: 'referred_by', label: 'Referred By', type: 'text', required: false }
+    { key: 'referred_by', label: 'Referred By', type: 'text', required: false },
+    { key: 'sales_support_id', label: 'Sales Support', type: 'sales_support_select', required: false }
   ];
 
-  // View presets with professional icons
-  const viewPresets = [
-    {
-      name: "all",
-      description: "All Agents",
-      filters: {},
-      icon: "▣",
-      color: "bg-blue-500"
-    },
-    {
-      name: "pending",
-      description: "Pending Review",
-      filters: { application_status: "pending" },
-      icon: "⏳",
-      color: "bg-yellow-500"
-    },
-    {
-      name: "approved",
-      description: "Approved",
-      filters: { application_status: "approved" },
-      icon: "✓",
-      color: "bg-green-500"
-    },
-    {
-      name: "rejected",
-      description: "Rejected",
-      filters: { application_status: "rejected" },
-      icon: "✗",
-      color: "bg-red-500"
-    },
-    {
-      name: "active",
-      description: "Active Users",
-      filters: { account_status: "active" },
-      icon: "🟢",
-      color: "bg-green-500"
-    },
-    {
-      name: "suspended",
-      description: "Suspended Users",
-      filters: { account_status: "suspended" },
-      icon: "🔴",
-      color: "bg-red-500"
-    },
-    {
-      name: "male",
-      description: "Male Agents",
-      filters: { gender: "male" },
-      icon: "♂",
-      color: "bg-indigo-500"
-    },
-    {
-      name: "female",
-      description: "Female Agents",
-      filters: { gender: "female" },
-      icon: "♀",
-      color: "bg-pink-500"
-    },
-    {
-      name: "recent",
-      description: "Last 7 Days",
-      filters: { date_range: "7days" },
-      icon: "📅",
-      color: "bg-purple-500"
-    }
-  ];
+  // Generate view presets with fixed sales support IDs 1, 2, 3
+  const viewPresets = useMemo(() => {
+    const baseViews = [
+      {
+        name: "all",
+        description: "All Agents",
+        filters: {},
+        icon: "▣",
+        color: "bg-blue-500"
+      },
+      {
+        name: "pending",
+        description: "Pending Review",
+        filters: { application_status: "pending" },
+        icon: "⏳",
+        color: "bg-yellow-500"
+      },
+      {
+        name: "approved",
+        description: "Approved",
+        filters: { application_status: "approved" },
+        icon: "✓",
+        color: "bg-green-500"
+      },
+      {
+        name: "rejected",
+        description: "Rejected",
+        filters: { application_status: "rejected" },
+        icon: "✗",
+        color: "bg-red-500"
+      },
+      {
+        name: "unassigned",
+        description: "Unassigned",
+        filters: { sales_support_id: "unassigned" },
+        icon: "📋",
+        color: "bg-gray-500"
+      }
+    ];
 
-  // Column configuration - Updated to include new columns
+    // Add fixed sales support views for IDs 1, 2, 3
+    const salesSupportViews = [
+      {
+        name: "sales_support_1",
+        description: salesSupport.find(ss => ss.id === 1)?.name || "Sales Support 1",
+        filters: { sales_support_id: "1" },
+        icon: "👤",
+        color: "bg-purple-500"
+      },
+      {
+        name: "sales_support_2", 
+        description: salesSupport.find(ss => ss.id === 2)?.name || "Sales Support 2",
+        filters: { sales_support_id: "2" },
+        icon: "👤",
+        color: "bg-indigo-500"
+      },
+      {
+        name: "sales_support_3",
+        description: salesSupport.find(ss => ss.id === 3)?.name || "Sales Support 3", 
+        filters: { sales_support_id: "3" },
+        icon: "👤",
+        color: "bg-teal-500"
+      }
+    ];
+
+    return [...baseViews, ...salesSupportViews];
+  }, [salesSupport]);
+
+  // Column configuration - UPDATED: sales support moved to front
   const columns = [
     { key: 'id', label: 'ID', sortable: true },
+    { key: 'sales_support_name', label: 'Sales Support', sortable: true }, // MOVED TO FRONT
     { key: 'full_name', label: 'Full Name', sortable: true },
     { key: 'gender', label: 'Gender', sortable: true },
     { key: 'email', label: 'Email', sortable: true },
@@ -174,15 +179,15 @@ const AgentReview = () => {
     { key: 'upline_email', label: 'Upline Email', sortable: true },
     { key: 'referred_by', label: 'Referred By', sortable: true },
     { key: 'account_status', label: 'Account Status', sortable: true },
-    { key: 'agreement_sent', label: 'Agreement Status', sortable: true }, // NEW
-    { key: 'agreement_url', label: 'Agreement URL', sortable: false }, // NEW
+    { key: 'agreement_sent', label: 'Agreement Status', sortable: true },
+    { key: 'agreement_url', label: 'Agreement URL', sortable: false },
     { key: 'icfront_s3', label: 'IC Front', sortable: false },
     { key: 'icback_s3', label: 'IC Back', sortable: false }
   ];
 
-  // Load agents data
+  // Load data
   useEffect(() => {
-    fetchAgents();
+    Promise.all([fetchAgents(), fetchSalesSupport()]);
   }, []);
 
   const fetchAgents = async () => {
@@ -202,18 +207,31 @@ const AgentReview = () => {
     }
   };
 
-  // Apply view preset
+  const fetchSalesSupport = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/admin/sales-support`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      setSalesSupport(data);
+    } catch (error) {
+      console.error("Error fetching sales support:", error);
+    }
+  };
+
+  // Apply view preset - UPDATED: search is separate
   const applyView = (viewName) => {
     setCurrentView(viewName);
     const view = viewPresets.find(v => v.name === viewName);
     
     // Reset all filters first
     const resetFilters = {
-      search: "",
       application_status: "",
       account_status: "",
       gender: "",
       user_type: "",
+      sales_support_id: "",
       date_range: ""
     };
     
@@ -226,14 +244,15 @@ const AgentReview = () => {
     setShowQuickViews(false);
   };
 
-  // Reset all filters
+  // Reset all filters - UPDATED: includes search
   const resetFilters = () => {
+    setSearchTerm(""); // NEW: Reset search
     setFilters({
-      search: "",
       application_status: "",
       account_status: "",
       gender: "",
       user_type: "",
+      sales_support_id: "",
       date_range: ""
     });
     setCurrentView("all");
@@ -249,22 +268,23 @@ const AgentReview = () => {
     setSortConfig({ key, direction });
   };
 
-  // Filtered agents based on current filters
+  // Filtered agents - UPDATED: search is separate from filters
   const filteredAgents = useMemo(() => {
     let filtered = agents.filter(agent => {
-      // Search filter
-      if (filters.search) {
-        const searchTerm = filters.search.toLowerCase();
+      // Search filter - now separate
+      if (searchTerm) {
+        const searchTermLower = searchTerm.toLowerCase();
         const searchableFields = [
           agent.full_name,
           agent.email,
           agent.agent_code || "",
           agent.national_id,
-          agent.phone
+          agent.phone,
+          agent.sales_support_name || ""
         ];
         
         const matchesSearch = searchableFields.some(field => 
-          field?.toLowerCase().includes(searchTerm)
+          field?.toLowerCase().includes(searchTermLower)
         );
         
         if (!matchesSearch) return false;
@@ -288,6 +308,15 @@ const AgentReview = () => {
       // User type filter
       if (filters.user_type && filters.user_type !== agent.user_type) {
         return false;
+      }
+
+      // Sales support filter
+      if (filters.sales_support_id) {
+        if (filters.sales_support_id === "unassigned") {
+          if (agent.sales_support_id) return false;
+        } else {
+          if (filters.sales_support_id != agent.sales_support_id) return false;
+        }
       }
 
       // Date range filter
@@ -346,7 +375,7 @@ const AgentReview = () => {
     }
 
     return filtered;
-  }, [agents, filters, sortConfig]);
+  }, [agents, searchTerm, filters, sortConfig]); // UPDATED: includes searchTerm
 
   // Get unique values for filter dropdowns
   const getUniqueValues = (field) => {
@@ -356,7 +385,7 @@ const AgentReview = () => {
     return [...new Set(values)].sort();
   };
 
-  // Calculate counts for each view
+  // Calculate counts for each view - UPDATED for new views
   const getViewCount = (viewName) => {
     if (viewName === "all") return agents.length;
     
@@ -368,24 +397,20 @@ const AgentReview = () => {
           return agent.application_status === "approved";
         case "rejected":
           return agent.application_status === "rejected";
-        case "active":
-          return agent.account_status === "active";
-        case "suspended":
-          return agent.account_status === "suspended";
-        case "male":
-          return agent.gender === "male";
-        case "female":
-          return agent.gender === "female";
-        case "recent":
-          const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-          return new Date(agent.created_at) > weekAgo;
+        case "unassigned":
+          return !agent.sales_support_id;
         default:
+          // Handle sales support specific views
+          if (viewName.startsWith('sales_support_')) {
+            const salesSupportId = viewName.replace('sales_support_', '');
+            return agent.sales_support_id && agent.sales_support_id.toString() === salesSupportId;
+          }
           return false;
       }
     }).length;
   };
 
-  // NEW: PDF file conversion helper
+  // PDF file conversion helper
   const convertFileToBase64 = (file) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -395,7 +420,7 @@ const AgentReview = () => {
     });
   };
 
-  // NEW: Approval modal functions
+  // Approval modal functions
   const openApprovalModal = (agent) => {
     setApprovalAgent(agent);
     setApprovalPdfFile(null);
@@ -428,7 +453,7 @@ const AgentReview = () => {
     }
   };
 
-  // NEW: Handle approval with PDF upload
+  // Handle approval with PDF upload
   const handleApprovalWithPdf = async () => {
     if (!approvalPdfFile) {
       alert('Please select a PDF file to upload.');
@@ -573,7 +598,13 @@ const AgentReview = () => {
       setAgents(prev =>
         prev.map(a =>
           a.id === editingAgent.id
-            ? { ...a, ...editFormData, updated_at: new Date().toISOString() }
+            ? { 
+                ...a, 
+                ...editFormData,
+                sales_support_name: editFormData.sales_support_id ? 
+                  salesSupport.find(ss => ss.id == editFormData.sales_support_id)?.name : null,
+                updated_at: new Date().toISOString() 
+              }
             : a
         )
       );
@@ -609,7 +640,13 @@ const AgentReview = () => {
       setAgents(prev =>
         prev.map(a =>
           a.id === editingAgent.id
-            ? result.agent || { ...a, ...editFormData, updated_at: new Date().toISOString() }
+            ? result.agent || { 
+                ...a, 
+                ...editFormData,
+                sales_support_name: editFormData.sales_support_id ? 
+                  salesSupport.find(ss => ss.id == editFormData.sales_support_id)?.name : null,
+                updated_at: new Date().toISOString() 
+              }
             : a
         )
       );
@@ -830,7 +867,7 @@ const AgentReview = () => {
     }
   };
 
-  // NEW: Agreement download handler
+  // Agreement download handler
   const handleAgreementDownload = async (agent) => {
     if (!agent.agreement_url) {
       alert('No agreement available for download.');
@@ -872,6 +909,7 @@ const AgentReview = () => {
 
     const csvData = filteredAgents.map(agent => ({
       ID: agent.id,
+      'Sales Support': agent.sales_support_name || 'Unassigned',
       'Full Name': agent.full_name || '',
       Gender: agent.gender || '',
       Email: agent.email || '',
@@ -948,7 +986,7 @@ const AgentReview = () => {
     return truncateText(s3Url);
   };
 
-  // NEW: Render agreement status badge
+  // Render agreement status badge
   const getAgreementStatusBadge = (agreementSent, agreementUrl) => {
     if (agreementSent === 1) {
       return (
@@ -971,7 +1009,7 @@ const AgentReview = () => {
     }
   };
 
-  // NEW: Get agreement button style based on status
+  // Get agreement button style based on status
   const getAgreementButtonStyle = (agreementSent) => {
     if (agreementSent === 1) {
       return "inline-flex items-center px-3 py-1.5 border border-green-300 text-xs font-medium rounded-md text-green-700 bg-green-50 hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors";
@@ -1008,6 +1046,22 @@ const AgentReview = () => {
     }
   };
 
+  // Get sales support badge
+  const getSalesSupportBadge = (salesSupportName) => {
+    if (!salesSupportName) {
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+          Unassigned
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+        {salesSupportName}
+      </span>
+    );
+  };
+
   // Loading state
   if (loading) {
     return (
@@ -1034,6 +1088,17 @@ const AgentReview = () => {
           
           {/* Action Bar */}
           <div className="flex flex-wrap items-center gap-3">
+            {/* Search Input - NOW OUTSIDE FILTERS */}
+            <div className="flex-1 min-w-80">
+              <input
+                type="text"
+                placeholder="Search agents (name, email, agent code, sales support...)"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              />
+            </div>
+
             {/* Quick Views Dropdown */}
             <div className="relative">
               <button
@@ -1083,7 +1148,7 @@ const AgentReview = () => {
               )}
             </div>
 
-            {/* Filters Dropdown */}
+            {/* Filters Dropdown - UPDATED: removed search */}
             <div className="relative">
               <button
                 onClick={() => setShowFiltersDropdown(!showFiltersDropdown)}
@@ -1094,7 +1159,7 @@ const AgentReview = () => {
                 }`}
               >
                 <span className="mr-2">⚙</span>
-                Show Filters
+                Filters
                 <span className="ml-2 text-xs">▼</span>
               </button>
               
@@ -1102,20 +1167,6 @@ const AgentReview = () => {
                 <div className="absolute top-full left-0 mt-1 w-80 bg-white rounded-lg shadow-lg border z-50 max-h-96 overflow-y-auto">
                   <div className="p-4">
                     <div className="space-y-4">
-                      {/* Search */}
-                      <div className="space-y-2">
-                        <label className="block text-sm font-medium text-gray-700">
-                          Search
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="Name, email, agent code..."
-                          value={filters.search}
-                          onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                        />
-                      </div>
-
                       {/* Application Status */}
                       <div className="space-y-2">
                         <label className="block text-sm font-medium text-gray-700">
@@ -1147,6 +1198,24 @@ const AgentReview = () => {
                           <option value="active">Active</option>
                           <option value="suspended">Suspended</option>
                           <option value="inactive">Inactive</option>
+                        </select>
+                      </div>
+
+                      {/* Sales Support Filter */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-700">
+                          Sales Support
+                        </label>
+                        <select
+                          value={filters.sales_support_id}
+                          onChange={(e) => setFilters(prev => ({ ...prev, sales_support_id: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        >
+                          <option value="">All Sales Support</option>
+                          <option value="unassigned">Unassigned</option>
+                          {salesSupport.map(ss => (
+                            <option key={ss.id} value={ss.id}>{ss.name}</option>
+                          ))}
                         </select>
                       </div>
 
@@ -1245,7 +1314,7 @@ const AgentReview = () => {
 
             {/* Refresh */}
             <button
-              onClick={fetchAgents}
+              onClick={() => Promise.all([fetchAgents(), fetchSalesSupport()])}
               className="flex items-center px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium"
             >
               <span className="mr-2">↻</span>
@@ -1265,12 +1334,18 @@ const AgentReview = () => {
                   {viewPresets.find(v => v.name === currentView)?.description}
                 </span>
               )}
+              {searchTerm && (
+                <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium">
+                  Search: "{searchTerm}"
+                </span>
+              )}
             </div>
           </div>
         </div>
       </div>
 
-      {/* NEW: Approval with PDF Modal */}
+      {/* All Modals - keeping existing modal code unchanged */}
+      {/* Approval with PDF Modal */}
       {showApprovalModal && approvalAgent && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
           <div className="bg-white rounded-lg shadow-2xl w-full max-w-md">
@@ -1523,7 +1598,7 @@ const AgentReview = () => {
         </div>
       )}
 
-      {/* Edit Modal */}
+      {/* Edit Modal - with sales support selection */}
       {showEditModal && editingAgent && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
           <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
@@ -1560,6 +1635,20 @@ const AgentReview = () => {
                         {field.options?.map(option => (
                           <option key={option} value={option}>
                             {option.charAt(0).toUpperCase() + option.slice(1)}
+                          </option>
+                        ))}
+                      </select>
+                    ) : field.type === 'sales_support_select' ? (
+                      <select
+                        value={editFormData[field.key] || ''}
+                        onChange={(e) => handleEditFormChange(field.key, e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        disabled={editLoading}
+                      >
+                        <option value="">Select Sales Support</option>
+                        {salesSupport.map(ss => (
+                          <option key={ss.id} value={ss.id}>
+                            {ss.name}
                           </option>
                         ))}
                       </select>
@@ -1609,6 +1698,10 @@ const AgentReview = () => {
                     }`}>
                       {editingAgent.account_status || 'Unknown'}
                     </span>
+                  </div>
+                  <div>
+                    <span className="font-medium">Current Sales Support:</span>
+                    <span className="ml-2">{getSalesSupportBadge(editingAgent.sales_support_name)}</span>
                   </div>
                   <div>
                     <span className="font-medium">Agreement Status:</span>
@@ -1709,7 +1802,6 @@ const AgentReview = () => {
                   </div>
                 </div>
 
-                {/* Application Notes */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Application Notes (Optional):
@@ -1753,15 +1845,15 @@ const AgentReview = () => {
             <p className="text-gray-500 mb-6">
               {agents.length === 0 
                 ? "No agents have been registered yet." 
-                : "No agents match your current filters."
+                : "No agents match your current search or filters."
               }
             </p>
-            {agents.length > 0 && (
+            {(agents.length > 0 || searchTerm) && (
               <button
                 onClick={resetFilters}
                 className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
               >
-                Clear all filters
+                Clear all filters and search
               </button>
             )}
           </div>
@@ -1774,7 +1866,7 @@ const AgentReview = () => {
                     {columns.map((column) => (
                       <th 
                         key={column.key}
-                        className={`px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-32 ${
+                        className={`px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${column.width} ${
                           column.sortable ? 'cursor-pointer hover:bg-gray-100 transition-colors' : ''
                         }`}
                         onClick={() => column.sortable && handleSort(column.key)}
@@ -1798,21 +1890,12 @@ const AgentReview = () => {
                     >
                       {columns.map((column) => (
                         <td key={column.key} className="px-4 py-3 text-sm text-gray-900">
-                          {column.key === 'icfront_s3' || column.key === 'icback_s3' ? (
+                          {column.key === 'icfront_s3' || column.key === 'icback_s3' || column.key === 'agreement_url' ? (
                             renderS3Link(agent[column.key])
-                          ) : column.key === 'agreement_url' ? (
-                            agent[column.key] ? (
-                              <button
-                                onClick={() => handleAgreementDownload(agent)}
-                                className="text-blue-600 hover:text-blue-800 underline text-sm"
-                              >
-                                Download PDF
-                              </button>
-                            ) : (
-                              "N/A"
-                            )
                           ) : column.key === 'agreement_sent' ? (
                             getAgreementStatusBadge(agent.agreement_sent, agent.agreement_url)
+                          ) : column.key === 'sales_support_name' ? (
+                            getSalesSupportBadge(agent.sales_support_name)
                           ) : column.key === 'address' || column.key === 'addr_line2' ? (
                             <span title={agent[column.key] || ""}>
                               {truncateText(agent[column.key])}
@@ -1830,7 +1913,7 @@ const AgentReview = () => {
                       ))}
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-medium sticky right-0 bg-inherit">
                         <div className="flex flex-wrap gap-2">
-                          {/* Edit Button - Available for all agents */}
+                          {/* Edit Button */}
                           <button
                             onClick={() => openEditModal(agent)}
                             className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
@@ -1842,7 +1925,7 @@ const AgentReview = () => {
                             Edit
                           </button>
                           
-                          {/* Status Change Button - Available for all agents */}
+                          {/* Status Change Button */}
                           <button
                             onClick={() => openStatusModal(agent)}
                             className="inline-flex items-center px-3 py-1.5 border border-indigo-300 text-xs font-medium rounded-md text-indigo-700 bg-indigo-50 hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
@@ -1854,7 +1937,7 @@ const AgentReview = () => {
                             Status
                           </button>
 
-                          {/* Agreement Button - Available for pending and approved agents, color-coded */}
+                          {/* Agreement Button */}
                           {(agent.application_status === "pending" || agent.application_status === "approved") && (
                             <button
                               onClick={() => openAgreementModal(agent)}

@@ -1,5 +1,6 @@
 // src/Sidebar.jsx
 import React from "react";
+// Temporary debugging - add this to see what's available
 
 const Sidebar = ({ 
   navigation, 
@@ -39,18 +40,26 @@ const Sidebar = ({
       {/* User info */}
       <div className="p-4 border-t border-gray-700 flex-shrink-0">
         <div className="flex items-center gap-3 mb-3">
-          <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center">
-            <span className="text-sm font-medium">
-              {user?.username?.charAt(0).toUpperCase() || "U"}
-            </span>
-          </div>
-          <div className="flex-1">
-            <p className="text-sm font-medium text-white">
-              {user?.attributes?.['custom:Name'] || user?.attributes?.name || "User"}
-            </p>
-            <p className="text-xs text-gray-400">Administrator</p>
-          </div>
-        </div>
+  <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center">
+    <span className="text-sm font-medium">
+      {(user?.attributes?.given_name?.charAt(0) || 
+        user?.attributes?.name?.charAt(0) || 
+        user?.username?.charAt(0) || 
+        "U").toUpperCase()}
+    </span>
+  </div>
+  <div className="flex-1">
+    <p className="text-sm font-medium text-white">
+      {user?.attributes?.given_name && user?.attributes?.family_name
+        ? `${user.attributes.given_name} ${user.attributes.family_name}`
+        : user?.attributes?.name || 
+          user?.attributes?.given_name || 
+          user?.username || 
+          "User"}
+    </p>
+    <p className="text-xs text-gray-400">Administrator</p>
+  </div>
+</div>
         
         {/* Sign Out Button */}
         <button
@@ -62,6 +71,7 @@ const Sidebar = ({
         </button>
       </div>
     </aside>
+    
   );
 };
 
