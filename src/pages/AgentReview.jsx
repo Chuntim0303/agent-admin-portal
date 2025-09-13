@@ -25,12 +25,6 @@ const AgentReview = () => {
   const [editFormData, setEditFormData] = useState({});
   const [editLoading, setEditLoading] = useState(false);
   
-  // Status change modal state
-  const [showStatusModal, setShowStatusModal] = useState(false);
-  const [statusChangeAgent, setStatusChangeAgent] = useState(null);
-  const [newStatus, setNewStatus] = useState('');
-  const [statusChangeReason, setStatusChangeReason] = useState('');
-  
   // Agreement modal state
   const [showAgreementModal, setShowAgreementModal] = useState(false);
   const [agreementAgent, setAgreementAgent] = useState(null);
@@ -43,8 +37,11 @@ const AgentReview = () => {
   const [approvalLoading, setApprovalLoading] = useState(false);
   const [approvalNotes, setApprovalNotes] = useState('');
   
-  // Filter states - UPDATED: search is now separate
-  const [searchTerm, setSearchTerm] = useState(""); // NEW: Separate search
+  // Inline sales support editing state
+  const [updatingSalesSupport, setUpdatingSalesSupport] = useState(new Set());
+  
+  // Filter states - search is separate
+  const [searchTerm, setSearchTerm] = useState("");
   const [filters, setFilters] = useState({
     application_status: "",
     account_status: "",
@@ -67,10 +64,24 @@ const AgentReview = () => {
     'Application submitted incorrectly'
   ];
 
+  // Hardcoded sales support mapping as requested
+  const getSalesSupportOptions = () => [
+    { id: 1, name: 'Samantha' },
+    { id: 2, name: 'Wei Wei' },
+    { id: 3, name: 'Fiona' }
+  ];
+
+  // Helper function to get sales support name by ID
+  const getSalesSupportNameById = (id) => {
+    const salesSupportOptions = getSalesSupportOptions();
+    const found = salesSupportOptions.find(ss => ss.id === parseInt(id));
+    return found ? found.name : null;
+  };
+
   // Editable fields configuration
   const editableFields = [
     { key: 'full_name', label: 'Full Name', type: 'text', required: true },
-    { key: 'gender', label: 'Gender', type: 'select', options: ['male', 'female'], required: true },
+    { key: 'gender', label: 'Gender', type: 'select', options: ['Male', 'Female'], required: true },
     { key: 'email', label: 'Email', type: 'email', required: true },
     { key: 'phone', label: 'Phone', type: 'text', required: true },
     { key: 'national_id', label: 'National ID', type: 'text', required: true },
@@ -107,6 +118,13 @@ const AgentReview = () => {
         color: "bg-yellow-500"
       },
       {
+        name: "under_review",
+        description: "Under Review",
+        filters: { application_status: "under_review" },
+        icon: "👁",
+        color: "bg-orange-500"
+      },
+      {
         name: "approved",
         description: "Approved",
         filters: { application_status: "approved" },
@@ -129,25 +147,25 @@ const AgentReview = () => {
       }
     ];
 
-    // Add fixed sales support views for IDs 1, 2, 3
+    // Add fixed sales support views for IDs 1, 2, 3 with hardcoded names
     const salesSupportViews = [
       {
         name: "sales_support_1",
-        description: salesSupport.find(ss => ss.id === 1)?.name || "Sales Support 1",
+        description: "Samantha",
         filters: { sales_support_id: "1" },
         icon: "👤",
         color: "bg-purple-500"
       },
       {
         name: "sales_support_2", 
-        description: salesSupport.find(ss => ss.id === 2)?.name || "Sales Support 2",
+        description: "Wei Wei",
         filters: { sales_support_id: "2" },
         icon: "👤",
         color: "bg-indigo-500"
       },
       {
         name: "sales_support_3",
-        description: salesSupport.find(ss => ss.id === 3)?.name || "Sales Support 3", 
+        description: "Fiona",
         filters: { sales_support_id: "3" },
         icon: "👤",
         color: "bg-teal-500"
@@ -155,12 +173,12 @@ const AgentReview = () => {
     ];
 
     return [...baseViews, ...salesSupportViews];
-  }, [salesSupport]);
+  }, []);
 
-  // Column configuration - UPDATED: sales support moved to front
+  // Column configuration
   const columns = [
     { key: 'id', label: 'ID', sortable: true },
-    { key: 'sales_support_name', label: 'Sales Support', sortable: true }, // MOVED TO FRONT
+    { key: 'sales_support_name', label: 'Sales Support', sortable: true },
     { key: 'full_name', label: 'Full Name', sortable: true },
     { key: 'gender', label: 'Gender', sortable: true },
     { key: 'email', label: 'Email', sortable: true },
@@ -180,7 +198,8 @@ const AgentReview = () => {
     { key: 'referred_by', label: 'Referred By', sortable: true },
     { key: 'account_status', label: 'Account Status', sortable: true },
     { key: 'agreement_sent', label: 'Agreement Status', sortable: true },
-    { key: 'agreement_url', label: 'Agreement URL', sortable: false },
+    { key: 'agreement_url', label: 'Admin Agreement', sortable: false },
+    { key: 'agreement_sent_url', label: 'Sent Agreement', sortable: false },
     { key: 'icfront_s3', label: 'IC Front', sortable: false },
     { key: 'icback_s3', label: 'IC Back', sortable: false }
   ];
@@ -198,6 +217,8 @@ const AgentReview = () => {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const data = await response.json();
+      
+      // Data already includes sales_support_name from backend
       setAgents(data);
     } catch (error) {
       console.error("Error fetching agents:", error);
@@ -209,18 +230,17 @@ const AgentReview = () => {
 
   const fetchSalesSupport = async () => {
     try {
-      const response = await fetch(`${API_BASE}/admin/sales-support`);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const data = await response.json();
-      setSalesSupport(data);
+      // Use hardcoded sales support data instead of API call
+      const hardcodedSalesSupport = getSalesSupportOptions();
+      setSalesSupport(hardcodedSalesSupport);
     } catch (error) {
-      console.error("Error fetching sales support:", error);
+      console.error("Error setting up sales support:", error);
+      // Fallback to hardcoded data
+      setSalesSupport(getSalesSupportOptions());
     }
   };
 
-  // Apply view preset - UPDATED: search is separate
+  // Apply view preset
   const applyView = (viewName) => {
     setCurrentView(viewName);
     const view = viewPresets.find(v => v.name === viewName);
@@ -244,9 +264,9 @@ const AgentReview = () => {
     setShowQuickViews(false);
   };
 
-  // Reset all filters - UPDATED: includes search
+  // Reset all filters
   const resetFilters = () => {
-    setSearchTerm(""); // NEW: Reset search
+    setSearchTerm("");
     setFilters({
       application_status: "",
       account_status: "",
@@ -268,10 +288,10 @@ const AgentReview = () => {
     setSortConfig({ key, direction });
   };
 
-  // Filtered agents - UPDATED: search is separate from filters
+  // Filtered agents
   const filteredAgents = useMemo(() => {
     let filtered = agents.filter(agent => {
-      // Search filter - now separate
+      // Search filter
       if (searchTerm) {
         const searchTermLower = searchTerm.toLowerCase();
         const searchableFields = [
@@ -375,7 +395,7 @@ const AgentReview = () => {
     }
 
     return filtered;
-  }, [agents, searchTerm, filters, sortConfig]); // UPDATED: includes searchTerm
+  }, [agents, searchTerm, filters, sortConfig]);
 
   // Get unique values for filter dropdowns
   const getUniqueValues = (field) => {
@@ -385,7 +405,7 @@ const AgentReview = () => {
     return [...new Set(values)].sort();
   };
 
-  // Calculate counts for each view - UPDATED for new views
+  // Calculate counts for each view
   const getViewCount = (viewName) => {
     if (viewName === "all") return agents.length;
     
@@ -393,6 +413,8 @@ const AgentReview = () => {
       switch (viewName) {
         case "pending":
           return agent.application_status === "pending";
+        case "under_review":
+          return agent.application_status === "under_review";
         case "approved":
           return agent.application_status === "approved";
         case "rejected":
@@ -482,9 +504,9 @@ const AgentReview = () => {
                 ...a, 
                 application_status: "approved",
                 account_status: "active",
-                agreement_sent: 1,
                 reviewed_at: new Date().toISOString(),
-                reviewed_by: "admin"
+                reviewed_by: "admin",
+                sales_support_name: a.sales_support_id ? getSalesSupportNameById(a.sales_support_id) : null
               }
             : a
         )
@@ -601,8 +623,7 @@ const AgentReview = () => {
             ? { 
                 ...a, 
                 ...editFormData,
-                sales_support_name: editFormData.sales_support_id ? 
-                  salesSupport.find(ss => ss.id == editFormData.sales_support_id)?.name : null,
+                sales_support_name: editFormData.sales_support_id ? getSalesSupportNameById(editFormData.sales_support_id) : null,
                 updated_at: new Date().toISOString() 
               }
             : a
@@ -640,11 +661,10 @@ const AgentReview = () => {
       setAgents(prev =>
         prev.map(a =>
           a.id === editingAgent.id
-            ? result.agent || { 
-                ...a, 
-                ...editFormData,
-                sales_support_name: editFormData.sales_support_id ? 
-                  salesSupport.find(ss => ss.id == editFormData.sales_support_id)?.name : null,
+            ? {
+                ...(result.agent || { ...a, ...editFormData }),
+                sales_support_name: (result.agent?.sales_support_id || editFormData.sales_support_id) ? 
+                  getSalesSupportNameById(result.agent?.sales_support_id || editFormData.sales_support_id) : null,
                 updated_at: new Date().toISOString() 
               }
             : a
@@ -669,70 +689,6 @@ const AgentReview = () => {
       alert(`Failed to update agent: ${error.message}`);
     } finally {
       setEditLoading(false);
-    }
-  };
-
-  // Status change modal functions
-  const openStatusModal = (agent) => {
-    setStatusChangeAgent(agent);
-    setNewStatus(agent.application_status);
-    setStatusChangeReason('');
-    setShowStatusModal(true);
-  };
-
-  const closeStatusModal = () => {
-    setShowStatusModal(false);
-    setStatusChangeAgent(null);
-    setNewStatus('');
-    setStatusChangeReason('');
-  };
-
-  const handleStatusChange = async () => {
-    if (!newStatus || newStatus === statusChangeAgent.application_status) {
-      alert('Please select a different status.');
-      return;
-    }
-
-    if (!statusChangeReason.trim()) {
-      alert('Please provide a reason for the status change.');
-      return;
-    }
-
-    try {
-      const response = await fetch(`${API_BASE}/admin/agents/status`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          id: statusChangeAgent.id,
-          status: newStatus,
-          reason: statusChangeReason,
-          updated_by: "admin"
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update status');
-      }
-
-      const result = await response.json();
-      
-      // Update UI
-      setAgents(prev =>
-        prev.map(a =>
-          a.id === statusChangeAgent.id
-            ? { ...a, application_status: newStatus, updated_at: new Date().toISOString() }
-            : a
-        )
-      );
-
-      closeStatusModal();
-      alert('Status updated successfully!');
-
-    } catch (error) {
-      console.error('Error updating status:', error);
-      alert('Failed to update status. Please try again.');
     }
   };
 
@@ -779,7 +735,7 @@ const AgentReview = () => {
       );
       
       closeAgreementModal();
-      alert(`Agreement sent successfully! (${result.file_type || 'PDF document'})`);
+      alert(`Agreement sent successfully! ${result.note || ''}`);
 
     } catch (error) {
       console.error('Error sending agreement:', error);
@@ -814,7 +770,96 @@ const AgentReview = () => {
     closeRejectionModal();
   };
 
-  // Handle approve/reject actions (simple approval without PDF)
+  // Handle inline sales support update
+  const handleSalesSupportUpdate = async (agentId, newSalesSupportId) => {
+    // Convert empty string to null for unassignment
+    const salesSupportId = newSalesSupportId === '' ? null : parseInt(newSalesSupportId);
+    
+    setUpdatingSalesSupport(prev => new Set(prev).add(agentId));
+
+    try {
+      // Find current agent data
+      const currentAgent = agents.find(a => a.id === agentId);
+      if (!currentAgent) {
+        throw new Error('Agent not found');
+      }
+
+      // Prepare update payload
+      const requestPayload = {
+        id: agentId,
+        ...currentAgent, // Include all current data
+        sales_support_id: salesSupportId,
+        updated_by: "admin"
+      };
+
+      // Update UI immediately for better UX
+      setAgents(prev =>
+        prev.map(a =>
+          a.id === agentId
+            ? {
+                ...a,
+                sales_support_id: salesSupportId,
+                sales_support_name: salesSupportId ? getSalesSupportNameById(salesSupportId) : null,
+                updated_at: new Date().toISOString()
+              }
+            : a
+        )
+      );
+
+      // Call backend API
+      const response = await fetch(`${API_BASE}/admin/agents/update`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestPayload)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to update sales support assignment`);
+      }
+
+      const result = await response.json();
+      
+      // Update with response data if available
+      if (result.agent) {
+        setAgents(prev =>
+          prev.map(a =>
+            a.id === agentId
+              ? {
+                  ...result.agent,
+                  sales_support_name: result.agent.sales_support_id ? 
+                    getSalesSupportNameById(result.agent.sales_support_id) : null
+                }
+              : a
+          )
+        );
+      }
+
+    } catch (error) {
+      console.error("Error updating sales support:", error);
+      
+      // Revert UI changes on error
+      const originalAgent = agents.find(a => a.id === agentId);
+      if (originalAgent) {
+        setAgents(prev =>
+          prev.map(a =>
+            a.id === agentId ? originalAgent : a
+          )
+        );
+      }
+      
+      alert(`Failed to update sales support assignment: ${error.message}`);
+    } finally {
+      setUpdatingSalesSupport(prev => {
+        const updated = new Set(prev);
+        updated.delete(agentId);
+        return updated;
+      });
+    }
+  };
+
+  // Handle approve/reject actions
   const handleAction = async (agentId, action, rejectionReasonText = null, notes = '') => {
     try {
       // Update UI immediately for better UX
@@ -867,39 +912,6 @@ const AgentReview = () => {
     }
   };
 
-  // Agreement download handler
-  const handleAgreementDownload = async (agent) => {
-    if (!agent.agreement_url) {
-      alert('No agreement available for download.');
-      return;
-    }
-
-    try {
-      const response = await fetch(`${API_BASE}/admin/agents/agreement-download`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          id: agent.id
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to get download URL');
-      }
-
-      const result = await response.json();
-      
-      // Open download URL in new tab
-      window.open(result.download_url, '_blank');
-
-    } catch (error) {
-      console.error('Error downloading agreement:', error);
-      alert('Failed to download agreement. Please try again.');
-    }
-  };
-
   // Export to CSV
   const exportToCSV = () => {
     if (filteredAgents.length === 0) {
@@ -930,7 +942,8 @@ const AgentReview = () => {
       'Application Status': agent.application_status || '',
       'Account Status': agent.account_status || '',
       'Agreement Sent': agent.agreement_sent || 0,
-      'Agreement URL': agent.agreement_url || '',
+      'Admin Agreement URL': agent.agreement_url || '',
+      'Sent Agreement URL': agent.agreement_sent_url || '',
       'IC Front S3': agent.icfront_s3 || '',
       'IC Back S3': agent.icback_s3 || ''
     }));
@@ -1025,6 +1038,8 @@ const AgentReview = () => {
         return `${baseClasses} bg-green-100 text-green-800`;
       case 'rejected':
         return `${baseClasses} bg-red-100 text-red-800`;
+      case 'under_review':
+        return `${baseClasses} bg-orange-100 text-orange-800`;
       case 'pending':
         return `${baseClasses} bg-yellow-100 text-yellow-800`;
       default:
@@ -1037,8 +1052,6 @@ const AgentReview = () => {
     switch (status) {
       case 'active':
         return `${baseClasses} bg-green-100 text-green-800`;
-      case 'suspended':
-        return `${baseClasses} bg-red-100 text-red-800`;
       case 'inactive':
         return `${baseClasses} bg-gray-100 text-gray-800`;
       default:
@@ -1088,7 +1101,7 @@ const AgentReview = () => {
           
           {/* Action Bar */}
           <div className="flex flex-wrap items-center gap-3">
-            {/* Search Input - NOW OUTSIDE FILTERS */}
+            {/* Search Input */}
             <div className="flex-1 min-w-80">
               <input
                 type="text"
@@ -1148,7 +1161,7 @@ const AgentReview = () => {
               )}
             </div>
 
-            {/* Filters Dropdown - UPDATED: removed search */}
+            {/* Filters Dropdown */}
             <div className="relative">
               <button
                 onClick={() => setShowFiltersDropdown(!showFiltersDropdown)}
@@ -1179,6 +1192,7 @@ const AgentReview = () => {
                         >
                           <option value="">All Statuses</option>
                           <option value="pending">Pending</option>
+                          <option value="under_review">Under Review</option>
                           <option value="approved">Approved</option>
                           <option value="rejected">Rejected</option>
                         </select>
@@ -1196,7 +1210,6 @@ const AgentReview = () => {
                         >
                           <option value="">All Account Status</option>
                           <option value="active">Active</option>
-                          <option value="suspended">Suspended</option>
                           <option value="inactive">Inactive</option>
                         </select>
                       </div>
@@ -1213,7 +1226,7 @@ const AgentReview = () => {
                         >
                           <option value="">All Sales Support</option>
                           <option value="unassigned">Unassigned</option>
-                          {salesSupport.map(ss => (
+                          {getSalesSupportOptions().map(ss => (
                             <option key={ss.id} value={ss.id}>{ss.name}</option>
                           ))}
                         </select>
@@ -1344,7 +1357,7 @@ const AgentReview = () => {
         </div>
       </div>
 
-      {/* All Modals - keeping existing modal code unchanged */}
+      {/* All Modals */}
       {/* Approval with PDF Modal */}
       {showApprovalModal && approvalAgent && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
@@ -1408,6 +1421,7 @@ const AgentReview = () => {
                   <h4 className="text-sm font-medium text-blue-900 mb-2">What will happen:</h4>
                   <ul className="text-sm text-blue-700 space-y-1">
                     <li>• Agent status will be set to "Approved"</li>
+                    <li>• Account status will be set to "Active"</li>
                     <li>• Cognito user account will be created</li>
                     <li>• PDF agreement will be uploaded to S3</li>
                     <li>• Agreement URL will be saved to database</li>
@@ -1438,80 +1452,6 @@ const AgentReview = () => {
                   ) : (
                     'Approve with PDF'
                   )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Status Change Modal */}
-      {showStatusModal && statusChangeAgent && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
-          <div className="bg-white rounded-lg shadow-2xl w-full max-w-md">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-semibold text-gray-900">Change Application Status</h3>
-                <button
-                  onClick={closeStatusModal}
-                  className="text-gray-400 hover:text-gray-600 text-2xl font-bold"
-                >
-                  ×
-                </button>
-              </div>
-              
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm text-gray-600 mb-4">
-                    Agent: <span className="font-semibold">{statusChangeAgent.full_name}</span>
-                  </p>
-                  <p className="text-sm text-gray-600 mb-4">
-                    Current Status: <span className={getStatusBadge(statusChangeAgent.application_status)}>{statusChangeAgent.application_status}</span>
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    New Status: <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={newStatus}
-                    onChange={(e) => setNewStatus(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="approved">Approved</option>
-                    <option value="rejected">Rejected</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Reason for Status Change: <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
-                    value={statusChangeReason}
-                    onChange={(e) => setStatusChangeReason(e.target.value)}
-                    placeholder="Please provide a reason for this status change..."
-                    rows={4}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                  />
-                </div>
-              </div>
-              
-              <div className="mt-6 flex justify-end space-x-3">
-                <button
-                  onClick={closeStatusModal}
-                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleStatusChange}
-                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
-                  disabled={!newStatus || !statusChangeReason.trim() || newStatus === statusChangeAgent.application_status}
-                >
-                  Update Status
                 </button>
               </div>
             </div>
@@ -1563,6 +1503,9 @@ const AgentReview = () => {
                     {agreementAgent?.application_status === "pending" && (
                       <li className="font-medium">• Agreement sent for review before final approval decision</li>
                     )}
+                    {agreementAgent?.application_status === "under_review" && (
+                      <li className="font-medium">• Agreement sent during review process</li>
+                    )}
                     {agreementAgent?.application_status === "approved" && (
                       <li className="font-medium">• Agent can sign and return the agreement</li>
                     )}
@@ -1598,7 +1541,7 @@ const AgentReview = () => {
         </div>
       )}
 
-      {/* Edit Modal - with sales support selection */}
+      {/* Edit Modal */}
       {showEditModal && editingAgent && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
           <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
@@ -1646,7 +1589,7 @@ const AgentReview = () => {
                         disabled={editLoading}
                       >
                         <option value="">Select Sales Support</option>
-                        {salesSupport.map(ss => (
+                        {getSalesSupportOptions().map(ss => (
                           <option key={ss.id} value={ss.id}>
                             {ss.name}
                           </option>
@@ -1684,6 +1627,7 @@ const AgentReview = () => {
                     <span className={`ml-2 px-2 py-1 rounded-full text-xs ${
                       editingAgent.application_status === 'approved' ? 'bg-green-100 text-green-800' :
                       editingAgent.application_status === 'rejected' ? 'bg-red-100 text-red-800' :
+                      editingAgent.application_status === 'under_review' ? 'bg-orange-100 text-orange-800' :
                       'bg-yellow-100 text-yellow-800'
                     }`}>
                       {editingAgent.application_status}
@@ -1693,10 +1637,9 @@ const AgentReview = () => {
                     <span className="font-medium">Account Status:</span>
                     <span className={`ml-2 px-2 py-1 rounded-full text-xs ${
                       editingAgent.account_status === 'active' ? 'bg-green-100 text-green-800' :
-                      editingAgent.account_status === 'suspended' ? 'bg-red-100 text-red-800' :
                       'bg-gray-100 text-gray-800'
                     }`}>
-                      {editingAgent.account_status || 'Unknown'}
+                      {editingAgent.account_status || 'Inactive'}
                     </span>
                   </div>
                   <div>
@@ -1713,13 +1656,14 @@ const AgentReview = () => {
                   </div>
                   {editingAgent.agreement_url && (
                     <div>
-                      <span className="font-medium">Agreement:</span>
-                      <button
-                        onClick={() => handleAgreementDownload(editingAgent)}
-                        className="ml-2 text-blue-600 hover:text-blue-800 underline text-sm"
-                      >
-                        Download PDF
-                      </button>
+                      <span className="font-medium">Admin Agreement:</span>
+                      <span className="ml-2">{renderS3Link(editingAgent.agreement_url)}</span>
+                    </div>
+                  )}
+                  {editingAgent.agreement_sent_url && (
+                    <div>
+                      <span className="font-medium">Sent Agreement:</span>
+                      <span className="ml-2">{renderS3Link(editingAgent.agreement_sent_url)}</span>
                     </div>
                   )}
                   {editingAgent.icfront_s3 && (
@@ -1760,7 +1704,7 @@ const AgentReview = () => {
                   'Update Agent'
                 )}
               </button>
-            </div>
+              </div>
           </div>
         </div>
       )}
@@ -1890,19 +1834,38 @@ const AgentReview = () => {
                     >
                       {columns.map((column) => (
                         <td key={column.key} className="px-4 py-3 text-sm text-gray-900">
-                          {column.key === 'icfront_s3' || column.key === 'icback_s3' || column.key === 'agreement_url' ? (
+                          {column.key === 'icfront_s3' || column.key === 'icback_s3' || column.key === 'agreement_url' || column.key === 'agreement_sent_url' ? (
                             renderS3Link(agent[column.key])
                           ) : column.key === 'agreement_sent' ? (
                             getAgreementStatusBadge(agent.agreement_sent, agent.agreement_url)
                           ) : column.key === 'sales_support_name' ? (
-                            getSalesSupportBadge(agent.sales_support_name)
+                            <div className="flex items-center space-x-2">
+                              <select
+                                value={agent.sales_support_id || ''}
+                                onChange={(e) => handleSalesSupportUpdate(agent.id, e.target.value)}
+                                disabled={updatingSalesSupport.has(agent.id)}
+                                className={`text-xs px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent transition-colors ${
+                                  updatingSalesSupport.has(agent.id) 
+                                    ? 'bg-gray-100 cursor-not-allowed' 
+                                    : 'bg-white hover:bg-gray-50'
+                                }`}
+                              >
+                                <option value="">Unassigned</option>
+                                {getSalesSupportOptions().map(ss => (
+                                  <option key={ss.id} value={ss.id}>{ss.name}</option>
+                                ))}
+                              </select>
+                              {updatingSalesSupport.has(agent.id) && (
+                                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-500"></div>
+                              )}
+                            </div>
                           ) : column.key === 'address' || column.key === 'addr_line2' ? (
                             <span title={agent[column.key] || ""}>
                               {truncateText(agent[column.key])}
                             </span>
                           ) : column.key === 'account_status' ? (
                             <span className={getAccountStatusBadge(agent[column.key])}>
-                              {agent[column.key] || 'Unknown'}
+                              {agent[column.key] || 'Inactive'}
                             </span>
                           ) : (
                             <span className={column.key === 'id' ? 'font-medium' : ''}>
@@ -1924,65 +1887,59 @@ const AgentReview = () => {
                             </svg>
                             Edit
                           </button>
-                          
-                          {/* Status Change Button */}
-                          <button
-                            onClick={() => openStatusModal(agent)}
-                            className="inline-flex items-center px-3 py-1.5 border border-indigo-300 text-xs font-medium rounded-md text-indigo-700 bg-indigo-50 hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
-                            title="Change Status"
-                          >
-                            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            Status
-                          </button>
 
                           {/* Agreement Button */}
-                          {(agent.application_status === "pending" || agent.application_status === "approved") && (
-                            <button
-                              onClick={() => openAgreementModal(agent)}
-                              className={getAgreementButtonStyle(agent.agreement_sent)}
-                              title="Send Agreement"
-                            >
-                              <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                              </svg>
-                              Agreement
-                            </button>
-                          )}
+                          <button
+                            onClick={() => openAgreementModal(agent)}
+                            className={getAgreementButtonStyle(agent.agreement_sent)}
+                            title="Send Agreement"
+                          >
+                            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            Agreement
+                          </button>
                           
-                          {/* Approve/Reject buttons - Only for pending agents */}
-                          {agent.application_status === "pending" && (
-                            <>
-                              <button
-                                onClick={() => openApprovalModal(agent)}
-                                className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
-                                title="Approve Agent with PDF"
-                              >
-                                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                                Approve
-                              </button>
-                              <button
-                                onClick={() => openRejectionModal(agent.id)}
-                                className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
-                                title="Reject Agent"
-                              >
-                                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                                Reject
-                              </button>
-                            </>
-                          )}
+                          {/* Approve/Reject buttons - disabled when already in that status */}
+                          <button
+                            onClick={() => openApprovalModal(agent)}
+                            disabled={agent.application_status === 'approved'}
+                            className={`inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                              agent.application_status === 'approved'
+                                ? 'bg-gray-400 cursor-not-allowed'
+                                : 'bg-green-600 hover:bg-green-700 focus:ring-green-500'
+                            }`}
+                            title={agent.application_status === 'approved' ? 'Agent already approved' : 'Approve Agent with PDF'}
+                          >
+                            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            {agent.application_status === 'approved' ? 'Approved' : 'Approve'}
+                          </button>
                           
-                          {/* Status display for non-pending agents */}
-                          {agent.application_status !== "pending" && (
-                            <span className={getStatusBadge(agent.application_status)}>
-                              {agent.application_status === "approved" ? "✓ Approved" : "✗ Rejected"}
-                            </span>
-                          )}
+                          <button
+                            onClick={() => openRejectionModal(agent.id)}
+                            disabled={agent.application_status === 'rejected'}
+                            className={`inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                              agent.application_status === 'rejected'
+                                ? 'bg-gray-400 cursor-not-allowed'
+                                : 'bg-red-600 hover:bg-red-700 focus:ring-red-500'
+                            }`}
+                            title={agent.application_status === 'rejected' ? 'Agent already rejected' : 'Reject Agent'}
+                          >
+                            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                            {agent.application_status === 'rejected' ? 'Rejected' : 'Reject'}
+                          </button>
+                          
+                          {/* Status Badge - shows current status */}
+                          <span className={getStatusBadge(agent.application_status)}>
+                            {agent.application_status === "approved" ? "✓ Approved" : 
+                             agent.application_status === "rejected" ? "✗ Rejected" : 
+                             agent.application_status === "under_review" ? "👁 Under Review" :
+                             "⏳ Pending"}
+                          </span>
                         </div>
                       </td>
                     </tr>
