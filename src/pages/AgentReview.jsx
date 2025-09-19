@@ -1,7 +1,268 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
+import ReactDOM from 'react-dom';
 
 // Your Lambda API endpoint
 const API_BASE = "https://ruthz37va6.execute-api.ap-southeast-1.amazonaws.com/dev";
+
+// Fixed Actions Dropdown Component using React Portal
+const ActionsDropdown = ({ agent, onEdit, onSendAgreement, onApprove, onReject }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+  const buttonRef = useRef(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target) && 
+          buttonRef.current && !buttonRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [isOpen]);
+
+  const getStatusBadge = (status) => {
+    const baseClasses = "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium";
+    switch (status) {
+      case 'approved':
+        return `${baseClasses} bg-green-100 text-green-800`;
+      case 'rejected':
+        return `${baseClasses} bg-red-100 text-red-800`;
+      case 'under_review':
+        return `${baseClasses} bg-orange-100 text-orange-800`;
+      case 'pending':
+        return `${baseClasses} bg-yellow-100 text-yellow-800`;
+      default:
+        return `${baseClasses} bg-gray-100 text-gray-800`;
+    }
+  };
+
+  const handleAction = (action, e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    setIsOpen(false);
+    
+    switch (action) {
+      case 'edit':
+        onEdit(agent);
+        break;
+      case 'agreement':
+        onSendAgreement(agent);
+        break;
+      case 'approve':
+        onApprove(agent);
+        break;
+      case 'reject':
+        onReject(agent.id);
+        break;
+    }
+  };
+
+  const handleButtonClick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsOpen(!isOpen);
+  };
+
+  // Get dropdown position
+  const getDropdownPosition = () => {
+    if (!buttonRef.current) return { top: 0, left: 0 };
+    
+    const rect = buttonRef.current.getBoundingClientRect();
+    return {
+      top: rect.bottom + window.scrollY + 8,
+      left: Math.max(10, rect.right - 200 + window.scrollX)
+    };
+  };
+
+  // Render dropdown content
+  const renderDropdown = () => {
+    if (!isOpen) return null;
+    
+    const position = getDropdownPosition();
+    
+    const dropdownElement = (
+      <div
+        ref={dropdownRef}
+        style={{
+          position: 'fixed',
+          top: position.top,
+          left: position.left,
+          zIndex: 999999,
+          minWidth: '200px',
+          backgroundColor: 'white',
+          border: '1px solid #e5e7eb',
+          borderRadius: '8px',
+          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+          fontFamily: 'inherit'
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ padding: '4px 0' }}>
+          {/* Edit Option */}
+          <button
+            onClick={(e) => handleAction('edit', e)}
+            style={{
+              width: '100%',
+              textAlign: 'left',
+              padding: '8px 16px',
+              fontSize: '14px',
+              color: '#374151',
+              backgroundColor: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              transition: 'background-color 0.15s ease'
+            }}
+            onMouseEnter={(e) => e.target.style.backgroundColor = '#f3f4f6'}
+            onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+          >
+            <svg style={{ width: '16px', height: '16px', marginRight: '8px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            Edit Profile
+          </button>
+          
+          {/* Agreement Option */}
+          <button
+            onClick={(e) => handleAction('agreement', e)}
+            style={{
+              width: '100%',
+              textAlign: 'left',
+              padding: '8px 16px',
+              fontSize: '14px',
+              color: agent.agreement_sent === 1 ? '#059669' : '#d97706',
+              backgroundColor: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              transition: 'background-color 0.15s ease'
+            }}
+            onMouseEnter={(e) => e.target.style.backgroundColor = '#f3f4f6'}
+            onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+          >
+            <svg style={{ width: '16px', height: '16px', marginRight: '8px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            {agent.agreement_sent === 1 ? 'Agreement Sent' : 'Send Agreement'}
+          </button>
+          
+          <div style={{ borderTop: '1px solid #f3f4f6', margin: '4px 0' }}></div>
+          
+          {/* Approve Option */}
+          <button
+            onClick={(e) => handleAction('approve', e)}
+            disabled={agent.application_status === 'approved'}
+            style={{
+              width: '100%',
+              textAlign: 'left',
+              padding: '8px 16px',
+              fontSize: '14px',
+              color: agent.application_status === 'approved' ? '#9ca3af' : '#059669',
+              backgroundColor: 'transparent',
+              border: 'none',
+              cursor: agent.application_status === 'approved' ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              transition: 'background-color 0.15s ease'
+            }}
+            onMouseEnter={(e) => {
+              if (agent.application_status !== 'approved') {
+                e.target.style.backgroundColor = '#f0fdf4';
+              }
+            }}
+            onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+          >
+            <svg style={{ width: '16px', height: '16px', marginRight: '8px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            {agent.application_status === 'approved' ? 'Already Approved' : 'Approve Agent'}
+          </button>
+          
+          {/* Reject Option */}
+          <button
+            onClick={(e) => handleAction('reject', e)}
+            disabled={agent.application_status === 'rejected'}
+            style={{
+              width: '100%',
+              textAlign: 'left',
+              padding: '8px 16px',
+              fontSize: '14px',
+              color: agent.application_status === 'rejected' ? '#9ca3af' : '#dc2626',
+              backgroundColor: 'transparent',
+              border: 'none',
+              cursor: agent.application_status === 'rejected' ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              transition: 'background-color 0.15s ease'
+            }}
+            onMouseEnter={(e) => {
+              if (agent.application_status !== 'rejected') {
+                e.target.style.backgroundColor = '#fef2f2';
+              }
+            }}
+            onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+          >
+            <svg style={{ width: '16px', height: '16px', marginRight: '8px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            {agent.application_status === 'rejected' ? 'Already Rejected' : 'Reject Agent'}
+          </button>
+        </div>
+      </div>
+    );
+
+    // Use React Portal to render outside current DOM tree
+    if (typeof document !== 'undefined') {
+      const portalContainer = document.getElementById('dropdown-portal') || document.body;
+      return ReactDOM.createPortal(dropdownElement, portalContainer);
+    }
+    
+    return dropdownElement;
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      {/* Status Badge */}
+      <span className={getStatusBadge(agent.application_status)}>
+        {agent.application_status === "approved" ? "✓ Approved" : 
+         agent.application_status === "rejected" ? "✗ Rejected" : 
+         agent.application_status === "under_review" ? "👁 Under Review" :
+         "⏳ Pending"}
+      </span>
+      
+      {/* Actions Button */}
+      <div className="relative">
+        <button
+          ref={buttonRef}
+          onClick={handleButtonClick}
+          className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+          title="Actions"
+          type="button"
+        >
+          <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+          </svg>
+          Actions
+          <svg className={`w-3 h-3 ml-1 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        
+        {/* Render dropdown using Portal */}
+        {renderDropdown()}
+      </div>
+    </div>
+  );
+};
 
 const AgentReview = () => {
   // State management
@@ -1022,31 +1283,6 @@ const AgentReview = () => {
     }
   };
 
-  // Get agreement button style based on status
-  const getAgreementButtonStyle = (agreementSent) => {
-    if (agreementSent === 1) {
-      return "inline-flex items-center px-3 py-1.5 border border-green-300 text-xs font-medium rounded-md text-green-700 bg-green-50 hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors";
-    } else {
-      return "inline-flex items-center px-3 py-1.5 border border-yellow-300 text-xs font-medium rounded-md text-yellow-700 bg-yellow-50 hover:bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition-colors";
-    }
-  };
-
-  const getStatusBadge = (status) => {
-    const baseClasses = "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium";
-    switch (status) {
-      case 'approved':
-        return `${baseClasses} bg-green-100 text-green-800`;
-      case 'rejected':
-        return `${baseClasses} bg-red-100 text-red-800`;
-      case 'under_review':
-        return `${baseClasses} bg-orange-100 text-orange-800`;
-      case 'pending':
-        return `${baseClasses} bg-yellow-100 text-yellow-800`;
-      default:
-        return `${baseClasses} bg-gray-100 text-gray-800`;
-    }
-  };
-
   const getAccountStatusBadge = (status) => {
     const baseClasses = "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium";
     switch (status) {
@@ -1484,9 +1720,6 @@ const AgentReview = () => {
                     Email: <span className="font-semibold">{agreementAgent.email}</span>
                   </p>
                   <p className="text-sm text-gray-600 mb-4">
-                    Current Status: <span className={getStatusBadge(agreementAgent.application_status)}>{agreementAgent.application_status}</span>
-                  </p>
-                  <p className="text-sm text-gray-600 mb-4">
                     Agreement Status: {getAgreementStatusBadge(agreementAgent.agreement_sent, agreementAgent.agreement_url)}
                   </p>
                 </div>
@@ -1500,15 +1733,6 @@ const AgentReview = () => {
                     <li>• Email with agreement link will be sent to the agent</li>
                     <li>• Agent will be able to download and review the agreement</li>
                     <li>• Agreement status will be marked as "Sent"</li>
-                    {agreementAgent?.application_status === "pending" && (
-                      <li className="font-medium">• Agreement sent for review before final approval decision</li>
-                    )}
-                    {agreementAgent?.application_status === "under_review" && (
-                      <li className="font-medium">• Agreement sent during review process</li>
-                    )}
-                    {agreementAgent?.application_status === "approved" && (
-                      <li className="font-medium">• Agent can sign and return the agreement</li>
-                    )}
                   </ul>
                 </div>
               </div>
@@ -1624,23 +1848,11 @@ const AgentReview = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                   <div>
                     <span className="font-medium">Application Status:</span>
-                    <span className={`ml-2 px-2 py-1 rounded-full text-xs ${
-                      editingAgent.application_status === 'approved' ? 'bg-green-100 text-green-800' :
-                      editingAgent.application_status === 'rejected' ? 'bg-red-100 text-red-800' :
-                      editingAgent.application_status === 'under_review' ? 'bg-orange-100 text-orange-800' :
-                      'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {editingAgent.application_status}
-                    </span>
+                    <span className="ml-2">{editingAgent.application_status}</span>
                   </div>
                   <div>
                     <span className="font-medium">Account Status:</span>
-                    <span className={`ml-2 px-2 py-1 rounded-full text-xs ${
-                      editingAgent.account_status === 'active' ? 'bg-green-100 text-green-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
-                      {editingAgent.account_status || 'Inactive'}
-                    </span>
+                    <span className="ml-2">{editingAgent.account_status || 'Inactive'}</span>
                   </div>
                   <div>
                     <span className="font-medium">Current Sales Support:</span>
@@ -1821,7 +2033,7 @@ const AgentReview = () => {
                         </div>
                       </th>
                     ))}
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-96 sticky right-0 bg-gray-50">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-56 sticky right-0 bg-gray-50">
                       Actions
                     </th>
                   </tr>
@@ -1875,72 +2087,13 @@ const AgentReview = () => {
                         </td>
                       ))}
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-medium sticky right-0 bg-inherit">
-                        <div className="flex flex-wrap gap-2">
-                          {/* Edit Button */}
-                          <button
-                            onClick={() => openEditModal(agent)}
-                            className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-                            title="Edit Agent Profile"
-                          >
-                            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                            Edit
-                          </button>
-
-                          {/* Agreement Button */}
-                          <button
-                            onClick={() => openAgreementModal(agent)}
-                            className={getAgreementButtonStyle(agent.agreement_sent)}
-                            title="Send Agreement"
-                          >
-                            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                            Agreement
-                          </button>
-                          
-                          {/* Approve/Reject buttons - disabled when already in that status */}
-                          <button
-                            onClick={() => openApprovalModal(agent)}
-                            disabled={agent.application_status === 'approved'}
-                            className={`inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                              agent.application_status === 'approved'
-                                ? 'bg-gray-400 cursor-not-allowed'
-                                : 'bg-green-600 hover:bg-green-700 focus:ring-green-500'
-                            }`}
-                            title={agent.application_status === 'approved' ? 'Agent already approved' : 'Approve Agent with PDF'}
-                          >
-                            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                            {agent.application_status === 'approved' ? 'Approved' : 'Approve'}
-                          </button>
-                          
-                          <button
-                            onClick={() => openRejectionModal(agent.id)}
-                            disabled={agent.application_status === 'rejected'}
-                            className={`inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                              agent.application_status === 'rejected'
-                                ? 'bg-gray-400 cursor-not-allowed'
-                                : 'bg-red-600 hover:bg-red-700 focus:ring-red-500'
-                            }`}
-                            title={agent.application_status === 'rejected' ? 'Agent already rejected' : 'Reject Agent'}
-                          >
-                            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                            {agent.application_status === 'rejected' ? 'Rejected' : 'Reject'}
-                          </button>
-                          
-                          {/* Status Badge - shows current status */}
-                          <span className={getStatusBadge(agent.application_status)}>
-                            {agent.application_status === "approved" ? "✓ Approved" : 
-                             agent.application_status === "rejected" ? "✗ Rejected" : 
-                             agent.application_status === "under_review" ? "👁 Under Review" :
-                             "⏳ Pending"}
-                          </span>
-                        </div>
+                        <ActionsDropdown
+                          agent={agent}
+                          onEdit={openEditModal}
+                          onSendAgreement={openAgreementModal}
+                          onApprove={openApprovalModal}
+                          onReject={openRejectionModal}
+                        />
                       </td>
                     </tr>
                   ))}
